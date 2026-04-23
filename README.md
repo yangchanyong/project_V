@@ -58,7 +58,7 @@ Controller → Service → Repository → DB
 
 | 단계 | 내용 | 완료 |
 |------|------|:----:|
-| 1단계 | 프로젝트 골격 세팅 + 테스트용 인증 (패키지 구조, 엔티티, Flyway, build.gradle) | |
+| 1단계 | 프로젝트 골격 세팅 + 테스트용 인증 (패키지 구조, 엔티티, Flyway, build.gradle) | ✅ |
 | 2단계 | 건프라 카탈로그 API (목록 조회, 검색/필터) | |
 | 3단계 | 컬렉션 API + 빌드 상태 머신 (CRUD, 소유권 검증, Soft Delete) | |
 | 4단계 | 위시리스트 API (위시 → 컬렉션 이동 트랜잭션 포함) | |
@@ -150,6 +150,11 @@ cloud.aws.region.static=ap-northeast-2
 ./gradlew bootRun
 ```
 
+```cmd
+# Windows (gradlew.bat Java 17 호환 이슈 시)
+java -Xmx64m -Xms64m -classpath "gradle\wrapper\gradle-wrapper.jar" org.gradle.wrapper.GradleWrapperMain bootRun
+```
+
 ### 테스트
 
 ```bash
@@ -180,3 +185,70 @@ hotfix/*  → 긴급 수정
 ```
 
 PR 제목은 Conventional Commits 형식 사용: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`
+
+---
+
+## 개발 로그
+
+<details>
+<summary>2026-04-23 — 1단계 완료 · 로컬 개발 환경 구성</summary>
+
+### 작업 내용
+- Docker Desktop 설치 및 MySQL 8.0 컨테이너 실행
+- `application-local.properties` DB 연결 설정
+- Spring Boot 기동 확인 — Flyway V1, V2 마이그레이션 자동 적용
+- Swagger UI (`http://localhost:8080/swagger-ui.html`) 동작 확인
+
+### 트러블슈팅
+
+<details>
+<summary>Docker Desktop 설치 실패 — <code>installation failed must be owned by an elevated account</code></summary>
+
+**원인**: `C:\ProgramData` 내 Docker 폴더 소유권이 일반 계정으로 되어 있어 설치 거부.
+
+**해결**:
+1. `C:\ProgramData`로 이동 → Docker 폴더 소유권을 관리자 계정으로 변경
+2. 설치 파일을 **관리자 권한으로 실행**
+</details>
+
+<details>
+<summary>Docker Desktop 설치 후 인터넷 불통 — 네트워크 충돌</summary>
+
+**원인**: Docker의 가상 네트워크 어댑터가 기존 DNS 설정과 충돌.
+
+**해결**: Docker Desktop → Settings → Docker Engine에서 DNS 명시 후 재부팅.
+
+```json
+{
+  "builder": { "gc": { "defaultKeepStorage": "20GB", "enabled": true } },
+  "dns": ["8.8.8.8", "8.8.4.4"],
+  "experimental": false
+}
+```
+</details>
+
+<details>
+<summary>Docker run 실행 오류 — <code>mysql: [ERROR] unknown option '--"'</code></summary>
+
+**원인**: PowerShell/CMD에서 복사 시 스마트 따옴표(`"`)가 섞여 들어감. `--default-authentication-plugin` 옵션이 MySQL 8.0.46에서 deprecated되어 파싱 오류 발생.
+
+**해결**: 해당 옵션 제거 후 재실행.
+
+```cmd
+docker run -d --name gunpla_mysql -e MYSQL_ROOT_PASSWORD=<pw> -e MYSQL_DATABASE=gunpla_local -p 3306:3306 mysql:8.0
+```
+</details>
+
+<details>
+<summary>gradlew bootRun 실행 오류 — <code>Error: -classpath requires class path specification</code></summary>
+
+**원인**: `gradlew.bat`이 빈 `CLASSPATH`를 `-classpath ""`로 Java에 전달하는데, Java 17이 빈 classpath 값을 거부.
+
+**해결**: Gradle Wrapper를 직접 호출.
+
+```cmd
+java -Xmx64m -Xms64m -classpath "gradle\wrapper\gradle-wrapper.jar" org.gradle.wrapper.GradleWrapperMain bootRun
+```
+</details>
+
+</details>
