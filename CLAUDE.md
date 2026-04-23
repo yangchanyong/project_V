@@ -84,8 +84,9 @@
 - 카탈로그 마스터 데이터 임의 수정/삭제 금지 (마이그레이션 파일로만)
 
 ## Workflow
-
 - 모든 non-trivial 작업은 Plan Mode로 시작 (Shift+Tab 두 번)
 - 기능 단위로 작업 → 테스트 작성 → 커밋
-- 커밋 메시지: Conventional Commits (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`)
+- 커밋 메시지 컨벤션: `docs/commit-convention.md` 참조
+- 이모지 + type + scope + 제목 구조
+- 한 커밋 = 하나의 목적 (제목에 "및/그리고" 금지)
 - 현재 작업 중인 단계는 `docs/milestones.md`에서 확인할 것
