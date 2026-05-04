@@ -6,6 +6,20 @@
 
 ---
 
+## 집에서 이어할 작업 체크리스트
+
+- [ ] `git pull` → `git checkout feature/catalog-api`
+- [ ] **V2 SQL 오류 확인**: `V2__catalog_data.sql`에 `created_at`, `updated_at` 누락됨. `bootRun` 전에 아래처럼 수정
+  ```sql
+  INSERT INTO gunpla_catalog (name, name_en, grade, series, scale, release_price, release_price_currency, release_date, manufacturer, created_at, updated_at)
+  VALUES (..., NOW(6), NOW(6));
+  ```
+- [ ] `./gradlew test` — 통합 테스트 포함 전체 실행 (Docker 필요)
+- [ ] `./gradlew bootRun` → `http://localhost:8080/swagger-ui.html` 에서 API 호출 확인
+- [ ] PR 생성: `feature/catalog-api` → `main`, 본문에 이 로그 링크 + AI 활용 비중 명시
+
+---
+
 ## 컨텍스트
 
 카탈로그 목록 조회(`GET /api/v1/catalog`)와 상세 조회(`GET /api/v1/catalog/{id}`)를 구현했다. 인증 없이 Swagger에서 바로 호출 가능한 것이 이 단계의 핵심 조건이었다. QueryDSL로 grade/series/keyword 동적 필터를 만들고, Testcontainers 기반 통합 테스트를 작성했다.
