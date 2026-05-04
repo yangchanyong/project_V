@@ -39,6 +39,9 @@ bin/
 !**/src/main/**/bin/
 !**/src/test/**/bin/
 
+### Claude Code ###
+.claude/
+
 ### OS ###
 .DS_Store
 Thumbs.db

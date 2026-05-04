@@ -76,4 +76,10 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
+	// Windows Docker Desktop에서 Testcontainers가 named pipe API 버전 협상에 실패하는 문제 우회
+	// docker_engine_linux는 WSL2 직접 연결 파이프로, Desktop 프록시 400 응답을 피함
+	if (System.getProperty('os.name').toLowerCase().startsWith('windows')) {
+		environment 'DOCKER_HOST', System.getenv('DOCKER_HOST') ?: 'npipe:////./pipe/docker_engine_linux'
+		systemProperty 'api.version', '1.44'
+	}
 }
