@@ -73,8 +73,8 @@ class CatalogQueryRepositoryTest {
 
         Page<GunplaCatalog> result = catalogQueryRepository.search(req, PageRequest.of(0, 20));
 
-        // "기동전사 건담", "기동전사 건담 UC" 매칭
-        assertThat(result.getTotalElements()).isEqualTo(2);
+        // "기동전사 건담"(2건: RX-78-2 건담, 자쿠II), "기동전사 건담 UC"(1건: 시나주) 매칭
+        assertThat(result.getTotalElements()).isEqualTo(3);
     }
 
     @Test

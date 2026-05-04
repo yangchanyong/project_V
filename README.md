@@ -94,8 +94,8 @@ StorageService (인터페이스)
 
 | 단계 | 내용 | 완료 | 협업 로그 |
 |------|------|:----:|:----:|
-| 1단계 | 프로젝트 골격 + 최소 CI 파이프라인 + 테스트용 인증 (패키지 구조, 엔티티, Flyway, build.gradle, PR 시 테스트 자동화) | | |
-| 2단계 | 건프라 카탈로그 API (목록 조회 + QueryDSL 동적 필터, 카탈로그 상세) | | |
+| 1단계 | 프로젝트 골격 + 최소 CI 파이프라인 + 테스트용 인증 (패키지 구조, 엔티티, Flyway, build.gradle, PR 시 테스트 자동화) | ✅ | |
+| 2단계 | 건프라 카탈로그 API (목록 조회 + QueryDSL 동적 필터, 카탈로그 상세) | ✅ | [02-catalog-api](docs/collab-log/02-catalog-api.md) |
 | 3단계 | 컬렉션 API + 빌드 상태 머신 (CRUD, 소유권 검증, Soft Delete) | | |
 | 4단계 | 위시리스트 API (위시 → 컬렉션 이동 트랜잭션 포함) | | |
 | 5단계 | S3 이미지 업로드 (보안 통제 포함 — 조건부 서명, UUID 키 생성) | | |
@@ -232,6 +232,79 @@ hotfix/*  → 긴급 수정
 ```
 
 PR 제목은 Conventional Commits 형식 사용: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`
+
+---
+
+## 2단계 기록 — 카탈로그 API + 통합 테스트 환경 구성
+
+> 상세 협업 로그: [`docs/collab-log/02-catalog-api.md`](docs/collab-log/02-catalog-api.md)
+
+<details>
+<summary>2026-05-04~05 — 다른 PC에서 이어서 진행하며 발생한 트러블슈팅</summary>
+
+### 작업 내용
+- `GET /api/v1/catalog` (목록 조회 + QueryDSL 동적 필터), `GET /api/v1/catalog/{id}` (상세 조회) 구현
+- `CatalogServiceTest` (Mockito 단위 테스트 4개), `CatalogQueryRepositoryTest` (Testcontainers 통합 테스트 6개) 작성
+- 처음 작업하던 PC에서 Docker 미설치로 통합 테스트를 완료하지 못한 채 PR 머지. 다른 PC에서 이어서 진행.
+
+### 트러블슈팅
+
+<details>
+<summary>Gradle Java 경로 하드코딩 — <code>Java home supplied is invalid</code></summary>
+
+**원인**: `gradle.properties`에 특정 PC의 JDK 절대경로(`C:\Program Files\Microsoft\jdk-17.0.18.8-hotspot`)가 하드코딩되어 있어 다른 PC에서 즉시 실패.
+
+**해결**: `org.gradle.java.home`을 프로젝트 `gradle.properties`에서 제거하고, 각 PC의 `~/.gradle/gradle.properties`에 개별 설정하도록 분리. Gradle 툴체인(`java { toolchain { languageVersion = 17 } }`)이 컴파일을 담당하므로 프로젝트 설정에 경로 불필요.
+</details>
+
+<details>
+<summary>V2 SQL <code>created_at</code>/<code>updated_at</code> 누락 — Flyway 마이그레이션 실패</summary>
+
+**원인**: `V2__catalog_data.sql` INSERT에 `NOT NULL` 컬럼인 `created_at`, `updated_at` 누락.
+
+**해결**: 모든 INSERT 행에 `NOW(6), NOW(6)` 추가.
+
+```sql
+INSERT INTO gunpla_catalog (..., created_at, updated_at)
+VALUES (..., NOW(6), NOW(6));
+```
+</details>
+
+<details>
+<summary>Testcontainers — Windows Docker Desktop 연결 실패 <code>Could not find a valid Docker environment</code></summary>
+
+**원인**: Docker Desktop 4.x의 `docker_engine` named pipe가 Java HTTP 클라이언트에 stub 응답(Status 400, ID: "")을 반환. Docker CLI(Go)는 이 리다이렉트를 투명하게 처리하지만 Testcontainers(Java)는 그렇지 못함. 추가로 docker-java 기본 API 버전(1.32)이 서버 최소 요구(1.40+)보다 낮아 별도 거부 발생.
+
+**해결**:
+- `docker_engine_linux` 파이프(WSL2 직접 연결) 사용으로 Desktop 프록시 우회
+- `api.version=1.44` 시스템 프로퍼티로 API 버전 명시
+- `build.gradle` test 태스크에 Windows 환경에서만 적용되도록 OS 조건부 처리 (CI/Linux 영향 없음)
+
+```groovy
+// build.gradle
+if (System.getProperty('os.name').toLowerCase().startsWith('windows')) {
+    environment 'DOCKER_HOST', System.getenv('DOCKER_HOST') ?: 'npipe:////./pipe/docker_engine_linux'
+    systemProperty 'api.version', '1.44'
+}
+```
+
+**새 PC 세팅 시 필요한 파일**: `~/.testcontainers.properties`
+```properties
+docker.client.strategy=org.testcontainers.dockerclient.EnvironmentAndSystemPropertyClientProviderStrategy
+```
+</details>
+
+<details>
+<summary>시드 파일 버전 충돌 — <code>Found more than one migration with version 2</code></summary>
+
+**원인**: `db/migration/V2__catalog_data.sql`과 `db/seed/V2__test_user.sql`의 버전 번호 중복. `application-local.properties`가 두 경로를 모두 스캔하도록 설정되어 충돌.
+
+**해결**: seed 파일을 `V3__test_user.sql`로 rename. Flyway 스키마 히스토리의 잘못된 V2 항목을 직접 수정하여 repair.
+
+**원칙**: `db/seed/`와 `db/migration/`을 함께 스캔할 경우, seed 파일 버전은 migration 최신 버전보다 항상 높게 유지.
+</details>
+
+</details>
 
 ---
 
