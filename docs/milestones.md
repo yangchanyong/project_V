@@ -3,21 +3,21 @@
 ## 전체 일정 개요
 
 ```
-1단계: 프로젝트 골격 세팅 + 테스트용 인증
+1단계: 프로젝트 골격 세팅 + 최소 CI 파이프라인 + 테스트용 인증   ← CI는 1단계부터
 2단계: 건프라 카탈로그 API            ← 핵심 비즈니스 먼저
 3단계: 컬렉션 API + 상태 머신
 4단계: 위시리스트 API
 5단계: S3 이미지 업로드 (보안 통제 포함)
 6단계: OAuth2 + 실제 JWT + Refresh Token   ← 인증을 뒤로 이동
 7단계: Rate Limiting + 운영 편의 기능
-8단계: CI/CD + AWS 배포
+8단계: AWS ECS 배포 + 운영 게이트 강화    ← CD + 배포 인프라
 ```
 
 > **순서 변경 이유**: OAuth2는 외부 프로바이더 연동으로 변수가 많아 일정이 늘어지기 쉽습니다. 핵심 비즈니스 API를 먼저 완성하면 Swagger·테스트·데모 거리가 빨리 생겨서 포트폴리오로서 보여줄 수 있는 것이 일찍 확보됩니다. 1단계에서 테스트용 인증(하드코딩 유저)으로 우회하고, 6단계에서 실제 인증으로 교체하는 전략.
 
 ---
 
-## 1단계: 프로젝트 골격 세팅 + 테스트용 인증
+## 1단계: 프로젝트 골격 세팅 + 최소 CI 파이프라인 + 테스트용 인증
 
 **브랜치**: `feature/project-scaffold` → develop
 
@@ -42,6 +42,7 @@
   - 하드코딩 테스트 유저를 DB에 시딩 (`V2__test_user.sql`, local 프로파일에서만 실행되도록 분리)
 - [ ] `GunplaApplicationTests` (Testcontainers contextLoads)
 - [ ] `./gradlew build` 컴파일 확인
+- [ ] `.github/workflows/ci.yml` — PR 시 자동 테스트 (최소 CI 파이프라인, 1단계부터 상시 활성)
 
 ---
 
@@ -173,14 +174,13 @@
 
 ---
 
-## 8단계: CI/CD + AWS 배포
+## 8단계: AWS ECS 배포 + 운영 게이트 강화
 
 **브랜치**: `feature/cicd-setup` → develop
 
 ### 작업 목록
 - [ ] `Dockerfile` 작성 (`eclipse-temurin:17-jre`)
-- [ ] `.github/workflows/ci.yml` — PR 시 테스트 자동화
-- [ ] `.github/workflows/cd.yml` — ECR push + ECS 배포
+- [ ] `.github/workflows/cd.yml` — ECR push + ECS 배포 (CD 파이프라인)
 - [ ] GitHub OIDC IAM Role 설정 (장기 키 미사용)
 - [ ] ECR 리포지토리 생성
 - [ ] ECS 클러스터 / 서비스 생성 (dev, prod)
@@ -189,4 +189,5 @@
   - DB 엔드포인트, 로그 레벨, CORS, OAuth2 redirect URI 등 환경별 구분
 - [ ] GitHub Secrets 등록 (`AWS_ROLE_ARN`, `ECR_REGISTRY`, `JWT_SECRET`, OAuth2 client secrets 등)
 - [ ] GitHub Environment `production` 보호 규칙 (수동 승인)
+- [ ] 운영 게이트 강화: 의존성 취약점 스캔 (`trivy` 또는 `dependency-check`)
 - [ ] 전체 E2E 배포 검증

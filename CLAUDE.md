@@ -1,5 +1,22 @@
 # Gundam Inventory Project
 
+## 프로젝트 정체성
+
+본 프로젝트는 건프라 인벤토리 플랫폼이라는 도메인을 빌려, **Claude Code 기반 AI 페어 프로그래밍 워크플로우**를 실증하는 것을 1차 목표로 합니다.
+
+- 1차 목표: AI 협업을 통한 설계·구현·검증·배포 전 과정의 워크플로우 정립과 기록
+- 2차 목표: Spring Boot, AWS, CI/CD 기술 스택의 유기적 통합 사례 구축
+- 3차 목표: 건프라 인벤토리 도메인의 실용적 기능 완성
+
+따라서 모든 단계 작업은 코드 산출물뿐 아니라 협업 과정의 기록(`docs/collab-log/`)을 함께 산출물로 남깁니다. 협업 로그가 없으면 단계 완료로 간주하지 않습니다.
+
+## 개발자 컨텍스트
+
+- 백엔드 개발자, PHP/CodeIgniter 2 레거시 운영 경험
+- 학습 중 스택: Java 17, Spring Boot 3.5, AWS, CI/CD
+- 본 프로젝트는 2026년 이직 포트폴리오
+- 처음 접하는 Java 개념(Stream, Optional, QueryDSL 고급 등)이 등장하면 코드 생성 전에 먼저 PHP 비교 설명 → 단순 예시 → 본 프로젝트 적용 순서로 진행
+
 ## Design Docs (SSOT)
 
 구현 전 반드시 관련 설계 문서를 먼저 읽을 것. 설계와 구현이 충돌하면 임의 결정하지 말고 사용자에게 확인.
@@ -9,6 +26,7 @@
 - `docs/erd.md` — ERD, 제약 조건, Soft Delete 정책
 - `docs/architecture.md` — 레이어 구조, 설계 결정사항
 - `docs/milestones.md` — 구현 순서 (현재 단계 확인)
+- `docs/collab-log/` — 단계별 AI 협업 로그 (1차 목표 산출물)
 
 **중요**: CLAUDE.md에 없는 구체적 스펙(에러 코드, 쿠키 속성, Rate Limit 수치 등)은 docs에서 확인할 것.
 
@@ -22,6 +40,7 @@
 - Bucket4j (Rate Limiting)
 - Swagger/OpenAPI (springdoc-openapi)
 - Gradle, JUnit 5, Testcontainers
+- GitHub Actions (CI/CD, 1단계부터 활성)
 
 ## Architecture Rules
 
@@ -82,11 +101,49 @@
 - `ddl-auto=update` / `create-drop` 설정 금지
 - `users` / `user_collection`을 hard delete로 삭제 금지 (Soft Delete 필수)
 - 카탈로그 마스터 데이터 임의 수정/삭제 금지 (마이그레이션 파일로만)
+- 양찬용이 처음 접하는 Java 개념을 설명 없이 코드로 바로 작성 금지
+- Auto-Accept 모드로 보안/트랜잭션/외부 API 통신 코드 처리 금지
+- 협업 로그 작성 없이 단계 완료 처리 금지
+- CI/CD 파이프라인 게이트 우회/약화 금지
+
+## AI 협업 모드 운용
+
+### Plan Mode 필수 작업
+- 새로운 단계 진입 시 작업 분해
+- 다중 파일 영향 리팩토링
+- 외부 라이브러리 도입 결정
+- DB 스키마 변경 (마이그레이션 작성 전 설계 합의)
+
+### Edit Mode 허용 작업
+- 단일 파일 내 명확한 변경
+- 플랜 모드에서 합의된 단계의 구현
+- 테스트 코드 작성
+
+### Auto-Accept 금지 영역
+- 보안 관련 코드 (인증, 인가, 토큰 처리)
+- 트랜잭션 경계 설정
+- 외부 API 통신 (S3, OAuth Provider)
+- Flyway 마이그레이션 스크립트
+
+## 협업 로그 작성 규칙
+
+각 단계 완료 시 `docs/collab-log/{단계번호}-{주제}.md` 파일을 생성합니다.
+
+필수 항목:
+- **컨텍스트**: 어떤 작업을 진행했는가
+- **AI 제안 vs 최종 결정**: AI가 처음 제시한 안과 실제 채택안의 차이, 그 이유
+- **AI가 놓친 부분**: 양찬용이 추가로 발견하거나 보완한 사항 (엣지 케이스, 보안 고려, 도메인 제약 등)
+- **학습 포인트**: 이 단계에서 새로 배운 개념 (PHP 비교 포함)
+- **다음 단계 영향**: 이 결정이 후속 단계에 미치는 영향
+
+협업 로그는 면접 시 활용 가능한 1차 자산으로 취급합니다.
 
 ## Workflow
+
 - 모든 non-trivial 작업은 Plan Mode로 시작 (Shift+Tab 두 번)
-- 기능 단위로 작업 → 테스트 작성 → 커밋
+- 기능 단위로 작업 → 테스트 작성 → CI 통과 확인 → 커밋
 - 커밋 메시지 컨벤션: `docs/commit-convention.md` 참조
 - 이모지 + type + scope + 제목 구조
 - 한 커밋 = 하나의 목적 (제목에 "및/그리고" 금지)
 - 현재 작업 중인 단계는 `docs/milestones.md`에서 확인할 것
+- 단계 완료 PR에는 협업 로그 링크와 AI 활용 비중(대략 %) 명시

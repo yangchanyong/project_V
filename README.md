@@ -1,6 +1,37 @@
-# 건프라 인벤토리 플랫폼
+# 건프라 인벤토리 플랫폼 × Claude Code AI 협업 실증
 
-> 건프라(건담 플라스틱 모델) 컬렉션을 관리하는 REST API 플랫폼 — 포트폴리오 프로젝트
+> **1차 목표**: Claude Code 기반 바이브코딩 + 하네스 엔지니어링 워크플로우 실증  
+> **2차 목표**: Spring Boot / AWS / CI/CD 기술 스택 유기적 통합  
+> **3차 목표**: 건프라(건담 플라스틱 모델) 컬렉션 관리 REST API 플랫폼 완성
+
+---
+
+## 프로젝트 정체성
+
+이 프로젝트는 건프라 인벤토리라는 도메인을 빌려, **"AI와 함께 실제 프로덕션급 백엔드를 어떻게 설계·구현·배포하는가"** 를 탐구하고 기록하는 것을 핵심 목적으로 합니다.
+
+PHP/CodeIgniter 레거시 배경을 가진 개발자가 Java 17 + Spring Boot 생태계를 Claude Code와 협업하며 처음부터 설계·구현하는 학습 여정이기도 합니다.
+
+코드 산출물과 동일한 비중으로, **협업 과정의 기록**(`docs/collab-log/`)을 남깁니다.  
+단계 완료 = 코드 + 협업 로그. 협업 로그 없이 단계 완료 처리 불가.
+
+---
+
+## 워크플로우 접근법
+
+### 바이브코딩 (Vibe Coding)
+자연어로 의도를 기술하고 Claude Code가 구현하는 고수준 AI 협업 개발 방식. 단순 자동완성이 아니라 설계 토론 → 플랜 합의 → 구현 → 검증까지 AI와 페어 프로그래밍.
+
+### 하네스 엔지니어링 (Harness Engineering)
+AI가 일관되고 안전하게 동작하도록 **환경을 설계하는 것**.
+
+| 하네스 구성 요소 | 역할 |
+|---|---|
+| `CLAUDE.md` | 프로젝트 컨텍스트, 아키텍처 규칙, 금지 사항 주입 |
+| Plan Mode 운용 | 다중 파일 변경 전 설계 합의 강제 |
+| Auto-Accept 경계 | 보안·트랜잭션·외부 API 코드는 반드시 사람이 검토 |
+| 협업 로그 규칙 | AI 제안 vs 최종 결정 차이를 매 단계 문서화 |
+| 메모리 시스템 | 개발자 컨텍스트(PHP 배경, 학습 수준)를 세션 간 유지 |
 
 ---
 
@@ -10,14 +41,15 @@
 |------|------|
 | Language | Java 17 |
 | Framework | Spring Boot 3.5.0 |
-| ORM | Spring Data JPA + QueryDSL 5.1.0 |
+| ORM | Spring Data JPA + QueryDSL 5.1.0 (jakarta) |
 | Database | MySQL 8.0 / AWS Aurora MySQL |
 | Migration | Flyway |
-| Auth | Spring Security + OAuth2 (Google, Kakao, Naver) + JWT |
-| Storage | AWS S3 (Presigned URL, 조건부 서명) |
-| Rate Limit | Bucket4j (Caffeine 백엔드) |
+| Auth | Spring Security + OAuth2 (Google, Kakao, Naver) + JWT (jjwt 0.12.6) |
+| Storage | AWS S3 (SDK v2, Presigned URL) |
+| Rate Limit | Bucket4j + Caffeine (로컬) / Redis 전환 가능 (운영 확장 시) |
 | API Docs | Swagger UI (springdoc-openapi) |
 | Test | JUnit 5 + Mockito + Testcontainers |
+| Build | Gradle |
 | Deploy | AWS ECS Fargate + ECR |
 | CI/CD | GitHub Actions |
 
@@ -26,50 +58,53 @@
 ## 시스템 아키텍처
 
 ```
-클라이언트
-    │
-    ▼
+클라이언트 (Swagger UI / 외부 앱)
+        │
+        ▼
 [AWS ALB]
-    │
-    ▼
+        │
+        ▼
 [AWS ECS Fargate]  ──  Spring Boot JAR
-    │
-    ├── [AWS Aurora MySQL]   ← JPA + QueryDSL + Flyway
-    └── [AWS S3]             ← 컬렉션 이미지 (Presigned URL)
+        │
+        ├── [AWS Aurora MySQL]   ← JPA + QueryDSL + Flyway
+        └── [AWS S3]             ← 컬렉션 이미지 (Presigned URL)
 ```
 
 **레이어 구조**
 ```
-Controller → Service → Repository → DB
-               │           │
-               │        QueryDSL (동적 필터)
-               │
-        StorageService (인터페이스)
-               │
-       ┌───────┴───────┐
-       ▼               ▼
-  S3StorageService  LocalStorageService
-   (운영)            (로컬 개발)
+Controller (HTTP 요청/응답, DTO)
+    │
+    ▼
+Service (비즈니스 로직, @Transactional)
+    │
+    ▼
+Repository (JPA + QueryDSL)
+    │
+    ▼
+DB (MySQL / Aurora)
+
+StorageService (인터페이스)
+    ├── S3StorageService   ← 운영
+    └── LocalStorageService ← 로컬 개발
 ```
 
 ---
 
 ## 구현 진행 현황
 
-| 단계 | 내용 | 완료 |
-|------|------|:----:|
-| 1단계 | 프로젝트 골격 세팅 + 테스트용 인증 (패키지 구조, 엔티티, Flyway, build.gradle) | ✅ |
-| 2단계 | 건프라 카탈로그 API (목록 조회, 검색/필터) | |
-| 3단계 | 컬렉션 API + 빌드 상태 머신 (CRUD, 소유권 검증, Soft Delete) | |
-| 4단계 | 위시리스트 API (위시 → 컬렉션 이동 트랜잭션 포함) | |
-| 5단계 | S3 이미지 업로드 (Presigned URL + 조건부 서명) | |
-| 6단계 | OAuth2 + 실제 JWT + Refresh Token (Google, Kakao, Naver) | |
-| 7단계 | Rate Limiting + Soft Delete 정리 배치 | |
-| 8단계 | CI/CD + AWS 배포 (GitHub Actions + ECS) | |
+| 단계 | 내용 | 완료 | 협업 로그 |
+|------|------|:----:|:----:|
+| 1단계 | 프로젝트 골격 + 최소 CI 파이프라인 + 테스트용 인증 (패키지 구조, 엔티티, Flyway, build.gradle, PR 시 테스트 자동화) | | |
+| 2단계 | 건프라 카탈로그 API (목록 조회 + QueryDSL 동적 필터, 카탈로그 상세) | | |
+| 3단계 | 컬렉션 API + 빌드 상태 머신 (CRUD, 소유권 검증, Soft Delete) | | |
+| 4단계 | 위시리스트 API (위시 → 컬렉션 이동 트랜잭션 포함) | | |
+| 5단계 | S3 이미지 업로드 (보안 통제 포함 — 조건부 서명, UUID 키 생성) | | |
+| 6단계 | OAuth2 + 실제 JWT + Refresh Token (Google, Kakao, Naver) | | |
+| 7단계 | Rate Limiting + 운영 편의 기능 (Soft Delete 배치, 만료 토큰 정리) | | |
+| 8단계 | AWS ECS 배포 + 운영 게이트 강화 (CD 파이프라인, ECR + ECS Fargate, Aurora, 보안 스캔) | | |
 
-> 완료된 단계는 완료 컬럼에 ✅ 표시
->
-> **단계 순서 결정 이유**: 핵심 비즈니스 API(카탈로그·컬렉션)를 먼저 완성하여 빠르게 동작하는 결과물을 확보한 뒤, OAuth2와 운영 기능을 후순위로 배치했습니다. 1단계에서는 테스트용 인증으로 우회하고 6단계에서 실제 OAuth2로 교체합니다.
+> 단계 완료 PR에는 협업 로그 링크와 AI 활용 비중(대략 %) 명시  
+> 단계 순서 결정 이유: 핵심 비즈니스 API(카탈로그·컬렉션)를 먼저 완성해 빠르게 동작하는 결과물 확보 후, OAuth2·운영 기능을 후순위 배치. 1단계는 테스트용 인증으로 우회하고 6단계에서 실제 OAuth2로 교체.
 
 ---
 
@@ -78,20 +113,30 @@ Controller → Service → Repository → DB
 - **소셜 로그인** — Google / Kakao / Naver OAuth2, JWT + Refresh Token (DB에 SHA-256 해시 저장)
 - **카탈로그** — 등급(HG/MG/PG 등), 시리즈, 키워드로 검색·필터 (QueryDSL 동적 쿼리)
 - **컬렉션 관리** — 보유 건프라 CRUD, **빌드 상태 머신** (`UNBUILT → IN_PROGRESS → COMPLETED → DISPLAYED`), Soft Delete
-- **다중 통화 지원** — 구매 통화(JPY/KRW/USD 등) ISO 4217 코드로 관리 (직구·국내 구매 혼재 케이스 대응)
-- **위시리스트** — 우선순위 관리, 구매 시 컬렉션으로 원클릭 이동 (트랜잭션)
-- **이미지 업로드** — S3 Presigned URL로 클라이언트 직접 업로드, **조건부 서명**으로 파일 타입·크기 제한
-- **Rate Limiting** — 고비용 엔드포인트(Presigned URL 발급, 토큰 갱신) 보호
+  - 역방향 1단계 실수 복구 허용, 단계 건너뛰기 금지
+- **다중 통화 지원** — 구매 통화(JPY/KRW/USD 등) ISO 4217 코드로 관리 (직구·국내 구매 혼재 대응)
+- **위시리스트** — 우선순위 관리, 구매 시 컬렉션으로 원클릭 이동 (트랜잭션), 중복 추가 불가
+- **이미지 업로드** — S3 Presigned URL로 클라이언트 직접 업로드, 조건부 서명으로 파일 타입·크기 제한 (최대 10MB)
+- **Rate Limiting** — 고비용 엔드포인트(Presigned URL 발급 분당 20건, 토큰 갱신 분당 10건) 보호
 
 ---
 
 ## 주요 설계 결정
 
-- **계정 식별**: `(provider, provider_id)` 조합 기준. 같은 이메일이라도 다른 소셜은 별도 계정
-- **N+1 방지**: QueryDSL fetch join + DTO projection, `images`는 별도 IN 쿼리로 매핑 (`MultipleBagFetchException` 회피)
+- **계정 식별**: `(provider, provider_id)` 조합 기준. 같은 이메일이라도 다른 소셜 프로바이더는 별도 계정
+- **N+1 방어 전략**
+
+  | 조회 지점 | 전략 |
+  |----------|------|
+  | 컬렉션 목록 + `catalog` | QueryDSL DTO projection + fetch join |
+  | 컬렉션 목록 + `images` | 별도 `IN` 쿼리 + Java 레벨 매핑 (`MultipleBagFetchException` 회피) |
+  | 위시리스트 목록 + `catalog` | `@EntityGraph(attributePaths = "catalog")` |
+  | 공통 안전망 | `default_batch_fetch_size=100` |
+
 - **Soft Delete**: 회원 탈퇴/컬렉션 삭제는 30일 유예 후 hard delete (S3 이미지 함께 정리)
-- **상태 머신**: 빌드 상태 전이는 enum 내부 메서드로 검증 (Rich Domain Model)
-- **Storage 추상화**: 외부 인프라 의존 서비스만 인터페이스 분리 (테스트 용이성)
+- **상태 머신**: 빌드 상태 전이 규칙은 `BuildStatus` enum 내부 메서드로 검증 (Rich Domain Model)
+- **Storage 추상화**: 외부 인프라 의존 서비스만 인터페이스 분리, 로컬 프로파일에서 구현체 교체 가능
+- **Refresh Token**: DB에 SHA-256 해시 저장, `revoked` 플래그로 논리적 무효화
 
 상세 내용은 [`docs/architecture.md`](docs/architecture.md) 참고.
 
@@ -99,7 +144,7 @@ Controller → Service → Repository → DB
 
 ## API 문서
 
-로컬 실행 후 아래 URL에서 Swagger UI 확인:
+로컬 실행 후 Swagger UI 확인:
 
 ```
 http://localhost:8080/swagger-ui.html
@@ -114,8 +159,8 @@ http://localhost:8080/swagger-ui.html
 ### 사전 요구사항
 
 - Java 17
-- MySQL 8.0 (로컬 실행) 또는 Docker
-- 소셜 OAuth2 앱 등록 (Google / Kakao / Naver Developer Console) — 6단계 이후 필요
+- Docker (MySQL 컨테이너 + Testcontainers 실행용)
+- OAuth2 앱 등록 (Google / Kakao / Naver Developer Console) — 6단계 이후 필요
 
 ### 환경변수 설정
 
@@ -139,7 +184,7 @@ jwt.secret=your-jwt-secret-key-min-32-characters
 jwt.access-token-expiration=3600000
 jwt.refresh-token-expiration=1209600000
 
-# AWS S3
+# AWS S3 (5단계 이후 필요)
 cloud.aws.s3.bucket=your-s3-bucket-name
 cloud.aws.region.static=ap-northeast-2
 ```
@@ -171,7 +216,9 @@ java -Xmx64m -Xms64m -classpath "gradle\wrapper\gradle-wrapper.jar" org.gradle.w
 | [`docs/erd.md`](docs/erd.md) | ERD (Mermaid) |
 | [`docs/api-spec.md`](docs/api-spec.md) | REST API 명세 |
 | [`docs/architecture.md`](docs/architecture.md) | 아키텍처 및 설계 결정사항 |
-| [`docs/milestones.md`](docs/milestones.md) | 구현 마일스톤 |
+| [`docs/milestones.md`](docs/milestones.md) | 구현 마일스톤 (단계별 작업 목록) |
+| [`docs/commit-convention.md`](docs/commit-convention.md) | 커밋 메시지 컨벤션 |
+| [`docs/collab-log/`](docs/collab-log/) | 단계별 AI 협업 로그 (AI 제안 vs 최종 결정, 학습 포인트) |
 
 ---
 
@@ -180,7 +227,7 @@ java -Xmx64m -Xms64m -classpath "gradle\wrapper\gradle-wrapper.jar" org.gradle.w
 ```
 main      → 프로덕션 배포 (수동 승인)
 develop   → 개발 서버 자동 배포
-feature/* → 기능 단위 개발
+feature/* → 기능 단위 개발 (예: feature/catalog-api)
 hotfix/*  → 긴급 수정
 ```
 
@@ -188,10 +235,12 @@ PR 제목은 Conventional Commits 형식 사용: `feat:`, `fix:`, `refactor:`, `
 
 ---
 
-## 개발 로그
+## 1단계 기록 — 로컬 개발 환경 구성
+
+> 협업 로그 시스템 도입 이전 기록. 2단계부터는 `docs/collab-log/` 형식으로 작성.
 
 <details>
-<summary>2026-04-23 — 1단계 완료 · 로컬 개발 환경 구성</summary>
+<summary>2026-04-23 — 작업 내용 및 트러블슈팅</summary>
 
 ### 작업 내용
 - Docker Desktop 설치 및 MySQL 8.0 컨테이너 실행
