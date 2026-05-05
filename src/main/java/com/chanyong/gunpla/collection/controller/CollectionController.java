@@ -1,9 +1,15 @@
 package com.chanyong.gunpla.collection.controller;
 
+import com.chanyong.gunpla.collection.dto.*;
 import com.chanyong.gunpla.collection.service.CollectionService;
+import com.chanyong.gunpla.global.response.ApiResponse;
+import com.chanyong.gunpla.global.response.PageResponse;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/collections")
@@ -11,4 +17,58 @@ import org.springframework.web.bind.annotation.RestController;
 public class CollectionController {
 
     private final CollectionService collectionService;
+
+    @GetMapping
+    public PageResponse<CollectionResponse> getCollections(
+        // TODO: replace with @AuthenticationPrincipal when step 6 (OAuth2/JWT) is implemented
+        @RequestHeader("X-User-Id") Long userId,
+        @ModelAttribute CollectionSearchRequest req,
+        @PageableDefault(size = 20) Pageable pageable
+    ) {
+        return collectionService.getCollections(userId, req, pageable);
+    }
+
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<CollectionCreateResponse> createCollection(
+        @RequestHeader("X-User-Id") Long userId,
+        @RequestBody @Valid CollectionCreateRequest req
+    ) {
+        return ApiResponse.of(collectionService.createCollection(userId, req));
+    }
+
+    @GetMapping("/{id}")
+    public ApiResponse<CollectionResponse> getCollection(
+        @RequestHeader("X-User-Id") Long userId,
+        @PathVariable Long id
+    ) {
+        return ApiResponse.of(collectionService.getCollection(userId, id));
+    }
+
+    @PatchMapping("/{id}")
+    public ApiResponse<CollectionCreateResponse> updateCollection(
+        @RequestHeader("X-User-Id") Long userId,
+        @PathVariable Long id,
+        @RequestBody CollectionUpdateRequest req
+    ) {
+        return ApiResponse.of(collectionService.updateCollection(userId, id, req));
+    }
+
+    @PatchMapping("/{id}/build-status")
+    public ApiResponse<BuildStatusUpdateResponse> changeStatus(
+        @RequestHeader("X-User-Id") Long userId,
+        @PathVariable Long id,
+        @RequestBody @Valid BuildStatusUpdateRequest req
+    ) {
+        return ApiResponse.of(collectionService.changeStatus(userId, id, req.buildStatus()));
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteCollection(
+        @RequestHeader("X-User-Id") Long userId,
+        @PathVariable Long id
+    ) {
+        collectionService.deleteCollection(userId, id);
+    }
 }
