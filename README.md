@@ -96,8 +96,8 @@ StorageService (인터페이스)
 |------|------|:----:|:----:|
 | 1단계 | 프로젝트 골격 + 최소 CI 파이프라인 + 테스트용 인증 (패키지 구조, 엔티티, Flyway, build.gradle, PR 시 테스트 자동화) | ✅ | |
 | 2단계 | 건프라 카탈로그 API (목록 조회 + QueryDSL 동적 필터, 카탈로그 상세) | ✅ | [02-catalog-api](docs/collab-log/02-catalog-api.md) |
-| 3단계 | 컬렉션 API + 빌드 상태 머신 (CRUD, 소유권 검증, Soft Delete) | | |
-| 4단계 | 위시리스트 API (위시 → 컬렉션 이동 트랜잭션 포함) | | |
+| 3단계 | 컬렉션 API + 빌드 상태 머신 (CRUD, 소유권 검증, Soft Delete) | ✅ | [03-collection-api](docs/collab-log/03-collection-api.md) |
+| 4단계 | 위시리스트 API (위시 → 컬렉션 이동 트랜잭션 포함) | ✅ | [04-wishlist-api](docs/collab-log/04-wishlist-api.md) |
 | 5단계 | S3 이미지 업로드 (보안 통제 포함 — 조건부 서명, UUID 키 생성) | | |
 | 6단계 | OAuth2 + 실제 JWT + Refresh Token (Google, Kakao, Naver) | | |
 | 7단계 | Rate Limiting + 운영 편의 기능 (Soft Delete 배치, 만료 토큰 정리) | | |
@@ -232,6 +232,30 @@ hotfix/*  → 긴급 수정
 ```
 
 PR 제목은 Conventional Commits 형식 사용: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`
+
+---
+
+## 4단계 기록 — 위시리스트 API
+
+> 상세 협업 로그: [`docs/collab-log/04-wishlist-api.md`](docs/collab-log/04-wishlist-api.md)
+
+- 5개 엔드포인트: `GET/POST /wishlists`, `PATCH/DELETE /wishlists/{id}`, `POST /wishlists/{id}/move-to-collection`
+- N+1 방지: `@EntityGraph(attributePaths = "catalog")` — 컬렉션과 달리 2차 컬렉션 없으므로 QueryDSL 불필요
+- 중복 체크: `existsByUserIdAndCatalogId` 사전 조회 → `409 WISHLIST_ALREADY_EXISTS`
+- `move-to-collection`: `@Transactional` 범위 내에서 collection save → wishlist delete 순서로 원자적 실행. 저장 실패 시 삭제 미호출 검증 테스트 포함 (단위 테스트 9개)
+- **교훈**: Plan Mode 진입 없이 구현을 시작했다가 사용자가 지적. 이후 플랜 승인 후 구현 진행.
+
+---
+
+## 3단계 기록 — 컬렉션 API + 빌드 상태 머신
+
+> 상세 협업 로그: [`docs/collab-log/03-collection-api.md`](docs/collab-log/03-collection-api.md)
+
+- 6개 엔드포인트: `GET/POST /collections`, `GET/PATCH/DELETE /collections/{id}`, `PATCH /collections/{id}/build-status`
+- 빌드 상태 머신: `UNBUILT → IN_PROGRESS → COMPLETED → DISPLAYED`. 순방향 + 역방향 1단계 복구 허용, 단계 건너뛰기 시 `400 INVALID_STATUS_TRANSITION`
+- N+1 방지: QueryDSL catalog fetch join + 별도 images `IN` 쿼리 (`MultipleBagFetchException` 회피)
+- 소유권 검증: `COLLECTION_NOT_FOUND` vs `COLLECTION_ACCESS_DENIED` 구분
+- 단위 테스트 8개 + Testcontainers 통합 테스트 5개
 
 ---
 
