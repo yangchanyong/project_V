@@ -16,6 +16,11 @@ public enum ErrorCode {
 
     // 컬렉션
     INVALID_STATUS_TRANSITION(HttpStatus.BAD_REQUEST, "INVALID_STATUS_TRANSITION", "허용되지 않은 빌드 상태 전이입니다."),
+    COLLECTION_NOT_FOUND(HttpStatus.NOT_FOUND, "COLLECTION_NOT_FOUND", "컬렉션을 찾을 수 없습니다."),
+    COLLECTION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "COLLECTION_ACCESS_DENIED", "컬렉션에 대한 접근 권한이 없습니다."),
+
+    // 사용자
+    USER_NOT_FOUND(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "사용자를 찾을 수 없습니다."),
 
     // 카탈로그
     CATALOG_NOT_FOUND(HttpStatus.NOT_FOUND, "CATALOG_NOT_FOUND", "카탈로그를 찾을 수 없습니다."),
