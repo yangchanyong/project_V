@@ -25,6 +25,11 @@ public enum ErrorCode {
     // 카탈로그
     CATALOG_NOT_FOUND(HttpStatus.NOT_FOUND, "CATALOG_NOT_FOUND", "카탈로그를 찾을 수 없습니다."),
 
+    // 위시리스트
+    WISHLIST_NOT_FOUND(HttpStatus.NOT_FOUND, "WISHLIST_NOT_FOUND", "위시리스트 항목을 찾을 수 없습니다."),
+    WISHLIST_ALREADY_EXISTS(HttpStatus.CONFLICT, "WISHLIST_ALREADY_EXISTS", "이미 위시리스트에 존재하는 항목입니다."),
+    WISHLIST_ACCESS_DENIED(HttpStatus.FORBIDDEN, "WISHLIST_ACCESS_DENIED", "위시리스트에 대한 접근 권한이 없습니다."),
+
     // Rate Limiting
     RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMIT_EXCEEDED", "요청 한도를 초과했습니다.");
 
