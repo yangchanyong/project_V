@@ -30,6 +30,10 @@ public enum ErrorCode {
     WISHLIST_ALREADY_EXISTS(HttpStatus.CONFLICT, "WISHLIST_ALREADY_EXISTS", "이미 위시리스트에 존재하는 항목입니다."),
     WISHLIST_ACCESS_DENIED(HttpStatus.FORBIDDEN, "WISHLIST_ACCESS_DENIED", "위시리스트에 대한 접근 권한이 없습니다."),
 
+    // 컬렉션 이미지
+    COLLECTION_IMAGE_NOT_FOUND(HttpStatus.NOT_FOUND, "COLLECTION_IMAGE_NOT_FOUND", "이미지를 찾을 수 없습니다."),
+    FILE_UPLOAD_VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "FILE_UPLOAD_VALIDATION_FAILED", "파일 형식 또는 크기가 유효하지 않습니다."),
+
     // Rate Limiting
     RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMIT_EXCEEDED", "요청 한도를 초과했습니다.");
 

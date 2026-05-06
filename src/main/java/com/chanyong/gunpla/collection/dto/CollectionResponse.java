@@ -3,6 +3,7 @@ package com.chanyong.gunpla.collection.dto;
 import com.chanyong.gunpla.collection.entity.BuildStatus;
 import com.chanyong.gunpla.collection.entity.CollectionImage;
 import com.chanyong.gunpla.collection.entity.UserCollection;
+import com.chanyong.gunpla.infrastructure.storage.StorageService;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -20,7 +21,7 @@ public record CollectionResponse(
     List<CollectionImageSummary> images,
     LocalDateTime createdAt
 ) {
-    public static CollectionResponse from(UserCollection c, List<CollectionImage> images) {
+    public static CollectionResponse from(UserCollection c, List<CollectionImage> images, StorageService storageService) {
         return new CollectionResponse(
             c.getId(),
             CatalogSummary.from(c.getCatalog()),
@@ -30,7 +31,9 @@ public record CollectionResponse(
             c.getPurchaseDate(),
             c.getPurchasePlace(),
             c.getMemo(),
-            images.stream().map(CollectionImageSummary::from).toList(),
+            images.stream()
+                .map(img -> CollectionImageSummary.from(img, storageService.generateGetPresignedUrl(img.getS3Key())))
+                .toList(),
             c.getCreatedAt()
         );
     }
