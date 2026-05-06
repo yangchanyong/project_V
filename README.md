@@ -50,7 +50,7 @@ AI가 일관되고 안전하게 동작하도록 **환경을 설계하는 것**.
 | API Docs | Swagger UI (springdoc-openapi) |
 | Test | JUnit 5 + Mockito + Testcontainers |
 | Build | Gradle |
-| Deploy | AWS EC2 (t3.micro) + nginx + Cloudflare |
+| Deploy | AWS EC2 (t3.micro) + Docker + nginx (host) + Cloudflare |
 | CI/CD | GitHub Actions |
 
 ---
@@ -64,7 +64,7 @@ AI가 일관되고 안전하게 동작하도록 **환경을 설계하는 것**.
 [Cloudflare] ← SSL termination + CDN (vibe.chanyongyang.com)
         │
         ▼
-[AWS EC2 (t3.micro)]  ──  nginx → Spring Boot JAR
+[AWS EC2 (t3.micro)]  ──  nginx (host) → Docker → Spring Boot JAR
         │
         ├── [AWS Aurora MySQL]   ← JPA + QueryDSL + Flyway
         └── [AWS S3]             ← 컬렉션 이미지 (Presigned URL, Cloudflare 프록시 제외)
