@@ -50,7 +50,7 @@ AI가 일관되고 안전하게 동작하도록 **환경을 설계하는 것**.
 | API Docs | Swagger UI (springdoc-openapi) |
 | Test | JUnit 5 + Mockito + Testcontainers |
 | Build | Gradle |
-| Deploy | AWS ECS Fargate + ECR |
+| Deploy | AWS EC2 (t3.micro) + nginx + Cloudflare |
 | CI/CD | GitHub Actions |
 
 ---
@@ -61,13 +61,13 @@ AI가 일관되고 안전하게 동작하도록 **환경을 설계하는 것**.
 클라이언트 (Swagger UI / 외부 앱)
         │
         ▼
-[AWS ALB]
+[Cloudflare] ← SSL termination + CDN (vibe.chanyongyang.com)
         │
         ▼
-[AWS ECS Fargate]  ──  Spring Boot JAR
+[AWS EC2 (t3.micro)]  ──  nginx → Spring Boot JAR
         │
         ├── [AWS Aurora MySQL]   ← JPA + QueryDSL + Flyway
-        └── [AWS S3]             ← 컬렉션 이미지 (Presigned URL)
+        └── [AWS S3]             ← 컬렉션 이미지 (Presigned URL, Cloudflare 프록시 제외)
 ```
 
 **레이어 구조**
@@ -98,10 +98,11 @@ StorageService (인터페이스)
 | 2단계 | 건프라 카탈로그 API (목록 조회 + QueryDSL 동적 필터, 카탈로그 상세) | ✅ | [02-catalog-api](docs/collab-log/02-catalog-api.md) |
 | 3단계 | 컬렉션 API + 빌드 상태 머신 (CRUD, 소유권 검증, Soft Delete) | ✅ | [03-collection-api](docs/collab-log/03-collection-api.md) |
 | 4단계 | 위시리스트 API (위시 → 컬렉션 이동 트랜잭션 포함) | ✅ | [04-wishlist-api](docs/collab-log/04-wishlist-api.md) |
+| 인프라 | AWS S3 + IAM + CORS 셋업, OAuth2 앱 등록 (Google/Kakao/Naver), 배포 아키텍처 결정 | ✅ | [infra-aws-prereq](docs/collab-log/infra-aws-prereq.md) |
 | 5단계 | S3 이미지 업로드 (보안 통제 포함 — 조건부 서명, UUID 키 생성) | | |
 | 6단계 | OAuth2 + 실제 JWT + Refresh Token (Google, Kakao, Naver) | | |
 | 7단계 | Rate Limiting + 운영 편의 기능 (Soft Delete 배치, 만료 토큰 정리) | | |
-| 8단계 | AWS ECS 배포 + 운영 게이트 강화 (CD 파이프라인, ECR + ECS Fargate, Aurora, 보안 스캔) | | |
+| 8단계 | AWS EC2 배포 + Cloudflare 도메인 연결 + 운영 게이트 강화 (EC2 + nginx, Aurora, CD 파이프라인, 보안 스캔) | | |
 
 > 단계 완료 PR에는 협업 로그 링크와 AI 활용 비중(대략 %) 명시  
 > 단계 순서 결정 이유: 핵심 비즈니스 API(카탈로그·컬렉션)를 먼저 완성해 빠르게 동작하는 결과물 확보 후, OAuth2·운영 기능을 후순위 배치. 1단계는 테스트용 인증으로 우회하고 6단계에서 실제 OAuth2로 교체.
@@ -168,25 +169,33 @@ http://localhost:8080/swagger-ui.html
 
 ```properties
 # Database
-spring.datasource.url=jdbc:mysql://localhost:3306/gunpla_dev?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
+spring.datasource.url=jdbc:mysql://localhost:3306/gunpla?characterEncoding=UTF-8&serverTimezone=Asia/Seoul
 spring.datasource.username=root
 spring.datasource.password=your_password
 
-# OAuth2 (6단계 이후 필요)
+# AWS S3 (5단계 이후 필요)
+aws.region=ap-northeast-2
+aws.s3.bucket=your-s3-bucket-name
+aws.credentials.access-key=YOUR_ACCESS_KEY_ID
+aws.credentials.secret-key=YOUR_SECRET_ACCESS_KEY
+
+# JWT (6단계 이후 필요)
+app.jwt.secret=your-512bit-base64-encoded-secret
+app.jwt.access-token-expiration-ms=3600000
+app.jwt.refresh-token-expiration-ms=1209600000
+
+# OAuth2 — Google (6단계 이후 필요)
 spring.security.oauth2.client.registration.google.client-id=YOUR_GOOGLE_CLIENT_ID
 spring.security.oauth2.client.registration.google.client-secret=YOUR_GOOGLE_CLIENT_SECRET
-spring.security.oauth2.client.registration.kakao.client-id=YOUR_KAKAO_CLIENT_ID
+
+# OAuth2 — Kakao (6단계 이후 필요)
+spring.security.oauth2.client.registration.kakao.client-id=YOUR_KAKAO_REST_API_KEY
+spring.security.oauth2.client.registration.kakao.client-secret=YOUR_KAKAO_CLIENT_SECRET
+
+# OAuth2 — Naver (6단계 이후 필요)
 spring.security.oauth2.client.registration.naver.client-id=YOUR_NAVER_CLIENT_ID
 spring.security.oauth2.client.registration.naver.client-secret=YOUR_NAVER_CLIENT_SECRET
-
-# JWT
-jwt.secret=your-jwt-secret-key-min-32-characters
-jwt.access-token-expiration=3600000
-jwt.refresh-token-expiration=1209600000
-
-# AWS S3 (5단계 이후 필요)
-cloud.aws.s3.bucket=your-s3-bucket-name
-cloud.aws.region.static=ap-northeast-2
 ```
 
 ### 실행
@@ -232,6 +241,18 @@ hotfix/*  → 긴급 수정
 ```
 
 PR 제목은 Conventional Commits 형식 사용: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`
+
+---
+
+## 인프라 사전 셋업 기록 — AWS + OAuth2 준비
+
+> 상세 협업 로그: [`docs/collab-log/infra-aws-prereq.md`](docs/collab-log/infra-aws-prereq.md)
+
+- **AWS S3**: `gunpla-dev-images` 버킷 생성, IAM 최소 권한 정책 (`PutObject`, `GetObject`, `DeleteObject`), CORS 설정 (Presigned URL 클라이언트 업로드 대응)
+- **OAuth2 앱 등록**: Google Cloud Console, Kakao Developers, Naver Developers 앱 등록 완료. credentials를 `application-local.properties`에 사전 등록 (6단계 주석 해제만 하면 동작)
+- **배포 아키텍처 결정**: 마일스톤 원안(ECS + ALB + ACM) → EC2 + nginx + Cloudflare Free로 변경. ALB 고정비 절감, CDN 무료 확보
+- **도메인 확정**: `vibe.chanyongyang.com` — 바이브코딩 프로젝트 정체성 강조
+- **교훈**: `s3:HeadObject`는 존재하지 않는 IAM 액션. `HeadObject` 요청은 `s3:GetObject`로 커버됨
 
 ---
 

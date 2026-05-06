@@ -174,20 +174,43 @@
 
 ---
 
-## 8단계: AWS ECS 배포 + 운영 게이트 강화
+## 8단계: AWS EC2 배포 + Cloudflare 도메인 연결 + 운영 게이트 강화
 
 **브랜치**: `feature/cicd-setup` → develop
 
+### 인프라 구성 (결정 사항)
+- 서버: EC2 (t3.micro) + nginx (리버스 프록시)
+- SSL/CDN: Cloudflare Free (엣지 SSL termination, ALB 미사용)
+- DNS: Cloudflare (`vibe.chanyongyang.com`)
+- DB: Aurora Serverless v2 (Private Subnet)
+- 이미지: S3 (`gunpla-dev-images`) — Presigned URL 직접 접근 (Cloudflare 프록시 제외)
+
 ### 작업 목록
+
+#### AWS 인프라
+- [ ] VPC / Security Group 설정 (EC2 ↔ Aurora 통신 허용)
+- [ ] Aurora Serverless v2 생성 (Private Subnet) + 초기 Flyway 마이그레이션
+- [ ] EC2 (t3.micro) 생성 + nginx 설치 및 리버스 프록시 설정
+- [ ] AWS Systems Manager Parameter Store — prod 환경변수 등록
+  - `JWT_SECRET`, OAuth2 client secrets, DB endpoint/password 등
+- [ ] S3 CORS `AllowedOrigins`에 `https://vibe.chanyongyang.com` 추가
+
+#### CI/CD
 - [ ] `Dockerfile` 작성 (`eclipse-temurin:17-jre`)
-- [ ] `.github/workflows/cd.yml` — ECR push + ECS 배포 (CD 파이프라인)
+- [ ] `.github/workflows/cd.yml` — JAR 빌드 → EC2 배포 (GitHub Actions)
 - [ ] GitHub OIDC IAM Role 설정 (장기 키 미사용)
-- [ ] ECR 리포지토리 생성
-- [ ] ECS 클러스터 / 서비스 생성 (dev, prod)
-- [ ] AWS Aurora MySQL 생성 및 초기 마이그레이션
-- [ ] `application-dev.yml`, `application-prod.yml` 프로파일 분리
-  - DB 엔드포인트, 로그 레벨, CORS, OAuth2 redirect URI 등 환경별 구분
-- [ ] GitHub Secrets 등록 (`AWS_ROLE_ARN`, `ECR_REGISTRY`, `JWT_SECRET`, OAuth2 client secrets 등)
+- [ ] GitHub Secrets 등록 (`AWS_ROLE_ARN`, `JWT_SECRET`, OAuth2 client secrets 등)
 - [ ] GitHub Environment `production` 보호 규칙 (수동 승인)
+
+#### 도메인 / SSL
+- [ ] Cloudflare에서 `chanyongyang.com` DNS 관리 이전 (이미 사용 중이면 레코드 추가만)
+- [ ] `vibe.chanyongyang.com` → EC2 Public IP A 레코드 등록 (Cloudflare Proxy ON)
+- [ ] Cloudflare SSL/TLS 모드: `Full` 설정 (EC2 nginx에 자체 서명 인증서 구성)
+- [ ] OAuth2 redirect URI 각 콘솔에서 `https://vibe.chanyongyang.com` 추가 등록
+  - Google Cloud Console, Kakao Developers, Naver Developers
+
+#### 애플리케이션
+- [ ] `application-prod.properties` 프로파일 작성
+  - DB 엔드포인트, CORS origin, OAuth2 redirect URI 환경별 구분
 - [ ] 운영 게이트 강화: 의존성 취약점 스캔 (`trivy` 또는 `dependency-check`)
 - [ ] 전체 E2E 배포 검증
