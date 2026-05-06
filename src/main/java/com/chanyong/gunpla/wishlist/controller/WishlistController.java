@@ -1,5 +1,6 @@
 package com.chanyong.gunpla.wishlist.controller;
 
+import com.chanyong.gunpla.global.auth.UserPrincipal;
 import com.chanyong.gunpla.global.response.ApiResponse;
 import com.chanyong.gunpla.global.response.PageResponse;
 import com.chanyong.gunpla.wishlist.dto.*;
@@ -9,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -20,48 +22,47 @@ public class WishlistController {
 
     @GetMapping
     public PageResponse<WishlistResponse> getWishlists(
-        // TODO: replace with @AuthenticationPrincipal when step 6 (OAuth2/JWT) is implemented
-        @RequestHeader("X-User-Id") Long userId,
+        @AuthenticationPrincipal UserPrincipal principal,
         @RequestParam(required = false) String priority,
         @PageableDefault(size = 20) Pageable pageable
     ) {
-        return wishlistService.getWishlists(userId, priority, pageable);
+        return wishlistService.getWishlists(principal.getId(), priority, pageable);
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<WishlistCreateResponse> createWishlist(
-        @RequestHeader("X-User-Id") Long userId,
+        @AuthenticationPrincipal UserPrincipal principal,
         @RequestBody @Valid WishlistCreateRequest req
     ) {
-        return ApiResponse.of(wishlistService.createWishlist(userId, req));
+        return ApiResponse.of(wishlistService.createWishlist(principal.getId(), req));
     }
 
     @PatchMapping("/{id}")
     public ApiResponse<WishlistCreateResponse> updateWishlist(
-        @RequestHeader("X-User-Id") Long userId,
+        @AuthenticationPrincipal UserPrincipal principal,
         @PathVariable Long id,
         @RequestBody WishlistUpdateRequest req
     ) {
-        return ApiResponse.of(wishlistService.updateWishlist(userId, id, req));
+        return ApiResponse.of(wishlistService.updateWishlist(principal.getId(), id, req));
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteWishlist(
-        @RequestHeader("X-User-Id") Long userId,
+        @AuthenticationPrincipal UserPrincipal principal,
         @PathVariable Long id
     ) {
-        wishlistService.deleteWishlist(userId, id);
+        wishlistService.deleteWishlist(principal.getId(), id);
     }
 
     @PostMapping("/{id}/move-to-collection")
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<MoveToCollectionResponse> moveToCollection(
-        @RequestHeader("X-User-Id") Long userId,
+        @AuthenticationPrincipal UserPrincipal principal,
         @PathVariable Long id,
         @RequestBody MoveToCollectionRequest req
     ) {
-        return ApiResponse.of(wishlistService.moveToCollection(userId, id, req));
+        return ApiResponse.of(wishlistService.moveToCollection(principal.getId(), id, req));
     }
 }
