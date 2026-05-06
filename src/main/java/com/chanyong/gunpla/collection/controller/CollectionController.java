@@ -1,6 +1,7 @@
 package com.chanyong.gunpla.collection.controller;
 
 import com.chanyong.gunpla.collection.dto.*;
+import com.chanyong.gunpla.collection.service.CollectionImageService;
 import com.chanyong.gunpla.collection.service.CollectionService;
 import com.chanyong.gunpla.global.response.ApiResponse;
 import com.chanyong.gunpla.global.response.PageResponse;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 public class CollectionController {
 
     private final CollectionService collectionService;
+    private final CollectionImageService collectionImageService;
 
     @GetMapping
     public PageResponse<CollectionResponse> getCollections(
@@ -70,5 +72,34 @@ public class CollectionController {
         @PathVariable Long id
     ) {
         collectionService.deleteCollection(userId, id);
+    }
+
+    @PostMapping("/{id}/images/presigned-url")
+    public ApiResponse<PresignedUrlResponse> generatePresignedUrl(
+        @RequestHeader("X-User-Id") Long userId,
+        @PathVariable Long id,
+        @RequestBody @Valid PresignedUrlRequest req
+    ) {
+        return ApiResponse.of(collectionImageService.generatePresignedUrl(userId, id, req));
+    }
+
+    @PostMapping("/{id}/images")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<ImageSaveResponse> saveImage(
+        @RequestHeader("X-User-Id") Long userId,
+        @PathVariable Long id,
+        @RequestBody @Valid ImageSaveRequest req
+    ) {
+        return ApiResponse.of(collectionImageService.saveImage(userId, id, req));
+    }
+
+    @DeleteMapping("/{id}/images/{imageId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteImage(
+        @RequestHeader("X-User-Id") Long userId,
+        @PathVariable Long id,
+        @PathVariable Long imageId
+    ) {
+        collectionImageService.deleteImage(userId, id, imageId);
     }
 }

@@ -11,9 +11,11 @@ import com.chanyong.gunpla.collection.repository.CollectionRepository;
 import com.chanyong.gunpla.global.exception.BusinessException;
 import com.chanyong.gunpla.global.exception.ErrorCode;
 import com.chanyong.gunpla.global.response.PageResponse;
+import com.chanyong.gunpla.infrastructure.storage.StorageService;
 import com.chanyong.gunpla.user.entity.User;
 import com.chanyong.gunpla.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -23,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -33,6 +36,7 @@ public class CollectionService {
     private final CollectionImageRepository collectionImageRepository;
     private final CatalogRepository catalogRepository;
     private final UserRepository userRepository;
+    private final StorageService storageService;
 
     public PageResponse<CollectionResponse> getCollections(Long userId, CollectionSearchRequest req, Pageable pageable) {
         if (pageable.getPageSize() > 100) {
@@ -46,7 +50,7 @@ public class CollectionService {
         Map<Long, List<CollectionImage>> imagesByCollectionId = fetchImagesByIds(ids);
 
         Page<CollectionResponse> responsePage = page.map(c ->
-            CollectionResponse.from(c, imagesByCollectionId.getOrDefault(c.getId(), List.of()))
+            CollectionResponse.from(c, imagesByCollectionId.getOrDefault(c.getId(), List.of()), storageService)
         );
         return PageResponse.of(responsePage);
     }
@@ -74,7 +78,7 @@ public class CollectionService {
     public CollectionResponse getCollection(Long userId, Long collectionId) {
         UserCollection collection = findOwnedCollection(collectionId, userId);
         List<CollectionImage> images = collectionImageRepository.findByCollection_IdIn(List.of(collectionId));
-        return CollectionResponse.from(collection, images);
+        return CollectionResponse.from(collection, images, storageService);
     }
 
     @Transactional
@@ -95,10 +99,19 @@ public class CollectionService {
     @Transactional
     public void deleteCollection(Long userId, Long collectionId) {
         UserCollection collection = findOwnedCollection(collectionId, userId);
+        // S3 이미지 먼저 삭제 (DB cascade 전에 처리)
+        List<CollectionImage> images = collectionImageRepository.findByCollection_IdIn(List.of(collectionId));
+        images.forEach(img -> {
+            try {
+                storageService.delete(img.getS3Key());
+            } catch (Exception e) {
+                log.warn("S3 이미지 삭제 실패 (계속 진행): s3Key={}", img.getS3Key(), e);
+            }
+        });
         collectionRepository.delete(collection);
     }
 
-    private UserCollection findOwnedCollection(Long collectionId, Long userId) {
+    UserCollection findOwnedCollection(Long collectionId, Long userId) {
         UserCollection collection = collectionRepository.findById(collectionId)
             .orElseThrow(() -> new BusinessException(ErrorCode.COLLECTION_NOT_FOUND));
         if (!collection.getUser().getId().equals(userId)) {
