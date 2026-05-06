@@ -246,7 +246,7 @@ PR 제목은 Conventional Commits 형식 사용: `feat:`, `fix:`, `refactor:`, `
 
 ## 단계별 개발 기록
 
-<details>
+<details open>
 <summary>1단계 — 로컬 개발 환경 구성 (2026-04-23)</summary>
 
 > 협업 로그 시스템 도입 이전 기록. 2단계부터는 `docs/collab-log/` 형식으로 작성.
@@ -331,14 +331,23 @@ java -Xmx64m -Xms64m -classpath "gradle\wrapper\gradle-wrapper.jar" org.gradle.w
 **원인**: `gradle.properties`에 특정 PC의 JDK 절대경로가 하드코딩되어 있어 다른 PC에서 즉시 실패.
 
 **해결**: `org.gradle.java.home`을 프로젝트 `gradle.properties`에서 제거하고, 각 PC의 `~/.gradle/gradle.properties`에 개별 설정하도록 분리.
+
+**교훈**: 머신 종속 경로는 절대 프로젝트 설정 파일에 커밋하지 않는다. `java { toolchain { languageVersion = 17 } }` 설정이 있으므로 컴파일은 툴체인이 처리한다.
 </details>
 
 <details>
 <summary>V2 SQL <code>created_at</code>/<code>updated_at</code> 누락 — Flyway 마이그레이션 실패</summary>
 
-**원인**: `V2__catalog_data.sql` INSERT에 `NOT NULL` 컬럼인 `created_at`, `updated_at` 누락.
+**원인**: AI가 샘플 INSERT 작성 시 `NOT NULL` 컬럼인 `created_at`, `updated_at`을 누락.
 
 **해결**: 모든 INSERT 행에 `NOW(6), NOW(6)` 추가.
+
+```sql
+INSERT INTO gunpla_catalog (name, grade, series, scale, price, created_at, updated_at)
+VALUES ('RX-78-2 건담', 'MG', '기동전사 건담', '1/100', 3800, NOW(6), NOW(6));
+```
+
+**교훈**: AI가 생성한 SQL은 반드시 스키마의 `NOT NULL` 컬럼과 대조 검토해야 한다.
 </details>
 
 <details>
