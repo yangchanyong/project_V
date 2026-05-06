@@ -244,129 +244,20 @@ PR 제목은 Conventional Commits 형식 사용: `feat:`, `fix:`, `refactor:`, `
 
 ---
 
-## 인프라 사전 셋업 기록 — AWS + OAuth2 준비
-
-> 상세 협업 로그: [`docs/collab-log/infra-aws-prereq.md`](docs/collab-log/infra-aws-prereq.md)
-
-- **AWS S3**: `gunpla-dev-images` 버킷 생성, IAM 최소 권한 정책 (`PutObject`, `GetObject`, `DeleteObject`), CORS 설정 (Presigned URL 클라이언트 업로드 대응)
-- **OAuth2 앱 등록**: Google Cloud Console, Kakao Developers, Naver Developers 앱 등록 완료. credentials를 `application-local.properties`에 사전 등록 (6단계 주석 해제만 하면 동작)
-- **배포 아키텍처 결정**: 마일스톤 원안(ECS + ALB + ACM) → EC2 + nginx + Cloudflare Free로 변경. ALB 고정비 절감, CDN 무료 확보
-- **도메인 확정**: `vibe.chanyongyang.com` — 바이브코딩 프로젝트 정체성 강조
-- **교훈**: `s3:HeadObject`는 존재하지 않는 IAM 액션. `HeadObject` 요청은 `s3:GetObject`로 커버됨
-
----
-
-## 4단계 기록 — 위시리스트 API
-
-> 상세 협업 로그: [`docs/collab-log/04-wishlist-api.md`](docs/collab-log/04-wishlist-api.md)
-
-- 5개 엔드포인트: `GET/POST /wishlists`, `PATCH/DELETE /wishlists/{id}`, `POST /wishlists/{id}/move-to-collection`
-- N+1 방지: `@EntityGraph(attributePaths = "catalog")` — 컬렉션과 달리 2차 컬렉션 없으므로 QueryDSL 불필요
-- 중복 체크: `existsByUserIdAndCatalogId` 사전 조회 → `409 WISHLIST_ALREADY_EXISTS`
-- `move-to-collection`: `@Transactional` 범위 내에서 collection save → wishlist delete 순서로 원자적 실행. 저장 실패 시 삭제 미호출 검증 테스트 포함 (단위 테스트 9개)
-- **교훈**: Plan Mode 진입 없이 구현을 시작했다가 사용자가 지적. 이후 플랜 승인 후 구현 진행.
-
----
-
-## 3단계 기록 — 컬렉션 API + 빌드 상태 머신
-
-> 상세 협업 로그: [`docs/collab-log/03-collection-api.md`](docs/collab-log/03-collection-api.md)
-
-- 6개 엔드포인트: `GET/POST /collections`, `GET/PATCH/DELETE /collections/{id}`, `PATCH /collections/{id}/build-status`
-- 빌드 상태 머신: `UNBUILT → IN_PROGRESS → COMPLETED → DISPLAYED`. 순방향 + 역방향 1단계 복구 허용, 단계 건너뛰기 시 `400 INVALID_STATUS_TRANSITION`
-- N+1 방지: QueryDSL catalog fetch join + 별도 images `IN` 쿼리 (`MultipleBagFetchException` 회피)
-- 소유권 검증: `COLLECTION_NOT_FOUND` vs `COLLECTION_ACCESS_DENIED` 구분
-- 단위 테스트 8개 + Testcontainers 통합 테스트 5개
-
----
-
-## 2단계 기록 — 카탈로그 API + 통합 테스트 환경 구성
-
-> 상세 협업 로그: [`docs/collab-log/02-catalog-api.md`](docs/collab-log/02-catalog-api.md)
+## 단계별 개발 기록
 
 <details>
-<summary>2026-05-04~05 — 다른 PC에서 이어서 진행하며 발생한 트러블슈팅</summary>
-
-### 작업 내용
-- `GET /api/v1/catalog` (목록 조회 + QueryDSL 동적 필터), `GET /api/v1/catalog/{id}` (상세 조회) 구현
-- `CatalogServiceTest` (Mockito 단위 테스트 4개), `CatalogQueryRepositoryTest` (Testcontainers 통합 테스트 6개) 작성
-- 처음 작업하던 PC에서 Docker 미설치로 통합 테스트를 완료하지 못한 채 PR 머지. 다른 PC에서 이어서 진행.
-
-### 트러블슈팅
-
-<details>
-<summary>Gradle Java 경로 하드코딩 — <code>Java home supplied is invalid</code></summary>
-
-**원인**: `gradle.properties`에 특정 PC의 JDK 절대경로(`C:\Program Files\Microsoft\jdk-17.0.18.8-hotspot`)가 하드코딩되어 있어 다른 PC에서 즉시 실패.
-
-**해결**: `org.gradle.java.home`을 프로젝트 `gradle.properties`에서 제거하고, 각 PC의 `~/.gradle/gradle.properties`에 개별 설정하도록 분리. Gradle 툴체인(`java { toolchain { languageVersion = 17 } }`)이 컴파일을 담당하므로 프로젝트 설정에 경로 불필요.
-</details>
-
-<details>
-<summary>V2 SQL <code>created_at</code>/<code>updated_at</code> 누락 — Flyway 마이그레이션 실패</summary>
-
-**원인**: `V2__catalog_data.sql` INSERT에 `NOT NULL` 컬럼인 `created_at`, `updated_at` 누락.
-
-**해결**: 모든 INSERT 행에 `NOW(6), NOW(6)` 추가.
-
-```sql
-INSERT INTO gunpla_catalog (..., created_at, updated_at)
-VALUES (..., NOW(6), NOW(6));
-```
-</details>
-
-<details>
-<summary>Testcontainers — Windows Docker Desktop 연결 실패 <code>Could not find a valid Docker environment</code></summary>
-
-**원인**: Docker Desktop 4.x의 `docker_engine` named pipe가 Java HTTP 클라이언트에 stub 응답(Status 400, ID: "")을 반환. Docker CLI(Go)는 이 리다이렉트를 투명하게 처리하지만 Testcontainers(Java)는 그렇지 못함. 추가로 docker-java 기본 API 버전(1.32)이 서버 최소 요구(1.40+)보다 낮아 별도 거부 발생.
-
-**해결**:
-- `docker_engine_linux` 파이프(WSL2 직접 연결) 사용으로 Desktop 프록시 우회
-- `api.version=1.44` 시스템 프로퍼티로 API 버전 명시
-- `build.gradle` test 태스크에 Windows 환경에서만 적용되도록 OS 조건부 처리 (CI/Linux 영향 없음)
-
-```groovy
-// build.gradle
-if (System.getProperty('os.name').toLowerCase().startsWith('windows')) {
-    environment 'DOCKER_HOST', System.getenv('DOCKER_HOST') ?: 'npipe:////./pipe/docker_engine_linux'
-    systemProperty 'api.version', '1.44'
-}
-```
-
-**새 PC 세팅 시 필요한 파일**: `~/.testcontainers.properties`
-```properties
-docker.client.strategy=org.testcontainers.dockerclient.EnvironmentAndSystemPropertyClientProviderStrategy
-```
-</details>
-
-<details>
-<summary>시드 파일 버전 충돌 — <code>Found more than one migration with version 2</code></summary>
-
-**원인**: `db/migration/V2__catalog_data.sql`과 `db/seed/V2__test_user.sql`의 버전 번호 중복. `application-local.properties`가 두 경로를 모두 스캔하도록 설정되어 충돌.
-
-**해결**: seed 파일을 `V3__test_user.sql`로 rename. Flyway 스키마 히스토리의 잘못된 V2 항목을 직접 수정하여 repair.
-
-**원칙**: `db/seed/`와 `db/migration/`을 함께 스캔할 경우, seed 파일 버전은 migration 최신 버전보다 항상 높게 유지.
-</details>
-
-</details>
-
----
-
-## 1단계 기록 — 로컬 개발 환경 구성
+<summary>1단계 — 로컬 개발 환경 구성 (2026-04-23)</summary>
 
 > 협업 로그 시스템 도입 이전 기록. 2단계부터는 `docs/collab-log/` 형식으로 작성.
 
-<details>
-<summary>2026-04-23 — 작업 내용 및 트러블슈팅</summary>
-
-### 작업 내용
+**작업 내용**
 - Docker Desktop 설치 및 MySQL 8.0 컨테이너 실행
 - `application-local.properties` DB 연결 설정
 - Spring Boot 기동 확인 — Flyway V1, V2 마이그레이션 자동 적용
 - Swagger UI (`http://localhost:8080/swagger-ui.html`) 동작 확인
 
-### 트러블슈팅
+**트러블슈팅**
 
 <details>
 <summary>Docker Desktop 설치 실패 — <code>installation failed must be owned by an elevated account</code></summary>
@@ -417,5 +308,128 @@ docker run -d --name gunpla_mysql -e MYSQL_ROOT_PASSWORD=<pw> -e MYSQL_DATABASE=
 java -Xmx64m -Xms64m -classpath "gradle\wrapper\gradle-wrapper.jar" org.gradle.wrapper.GradleWrapperMain bootRun
 ```
 </details>
+
+</details>
+
+---
+
+<details>
+<summary>2단계 — 카탈로그 API + 통합 테스트 환경 구성 (2026-05-04~05)</summary>
+
+> 상세 협업 로그: [`docs/collab-log/02-catalog-api.md`](docs/collab-log/02-catalog-api.md)
+
+**작업 내용**
+- `GET /api/v1/catalog` (목록 조회 + QueryDSL 동적 필터), `GET /api/v1/catalog/{id}` (상세 조회) 구현
+- `CatalogServiceTest` (Mockito 단위 테스트 4개), `CatalogQueryRepositoryTest` (Testcontainers 통합 테스트 6개) 작성
+- 처음 작업하던 PC에서 Docker 미설치로 통합 테스트를 완료하지 못한 채 PR 머지. 다른 PC에서 이어서 진행.
+
+**트러블슈팅**
+
+<details>
+<summary>Gradle Java 경로 하드코딩 — <code>Java home supplied is invalid</code></summary>
+
+**원인**: `gradle.properties`에 특정 PC의 JDK 절대경로가 하드코딩되어 있어 다른 PC에서 즉시 실패.
+
+**해결**: `org.gradle.java.home`을 프로젝트 `gradle.properties`에서 제거하고, 각 PC의 `~/.gradle/gradle.properties`에 개별 설정하도록 분리.
+</details>
+
+<details>
+<summary>V2 SQL <code>created_at</code>/<code>updated_at</code> 누락 — Flyway 마이그레이션 실패</summary>
+
+**원인**: `V2__catalog_data.sql` INSERT에 `NOT NULL` 컬럼인 `created_at`, `updated_at` 누락.
+
+**해결**: 모든 INSERT 행에 `NOW(6), NOW(6)` 추가.
+</details>
+
+<details>
+<summary>Testcontainers — Windows Docker Desktop 연결 실패 <code>Could not find a valid Docker environment</code></summary>
+
+**원인**: Docker Desktop 4.x의 `docker_engine` named pipe가 Java HTTP 클라이언트에 stub 응답을 반환. docker-java 기본 API 버전(1.32)이 서버 최소 요구(1.40+)보다 낮아 별도 거부 발생.
+
+**해결**: `docker_engine_linux` 파이프(WSL2 직접 연결) 사용 + `api.version=1.44` 명시 + OS 조건부 처리.
+
+```groovy
+if (System.getProperty('os.name').toLowerCase().startsWith('windows')) {
+    environment 'DOCKER_HOST', System.getenv('DOCKER_HOST') ?: 'npipe:////./pipe/docker_engine_linux'
+    systemProperty 'api.version', '1.44'
+}
+```
+
+**새 PC 세팅 시 필요한 파일** `~/.testcontainers.properties`:
+```properties
+docker.client.strategy=org.testcontainers.dockerclient.EnvironmentAndSystemPropertyClientProviderStrategy
+```
+</details>
+
+<details>
+<summary>시드 파일 버전 충돌 — <code>Found more than one migration with version 2</code></summary>
+
+**원인**: `db/migration/V2__catalog_data.sql`과 `db/seed/V2__test_user.sql`의 버전 번호 중복.
+
+**해결**: seed 파일을 `V3__test_user.sql`로 rename. Flyway 스키마 히스토리 repair.
+
+**원칙**: seed 파일 버전은 migration 최신 버전보다 항상 높게 유지.
+</details>
+
+</details>
+
+---
+
+<details>
+<summary>3단계 — 컬렉션 API + 빌드 상태 머신</summary>
+
+> 상세 협업 로그: [`docs/collab-log/03-collection-api.md`](docs/collab-log/03-collection-api.md)
+
+- 6개 엔드포인트: `GET/POST /collections`, `GET/PATCH/DELETE /collections/{id}`, `PATCH /collections/{id}/build-status`
+- 빌드 상태 머신: `UNBUILT → IN_PROGRESS → COMPLETED → DISPLAYED`. 순방향 + 역방향 1단계 복구 허용, 단계 건너뛰기 시 `400 INVALID_STATUS_TRANSITION`
+- N+1 방지: QueryDSL catalog fetch join + 별도 images `IN` 쿼리 (`MultipleBagFetchException` 회피)
+- 소유권 검증: `COLLECTION_NOT_FOUND` vs `COLLECTION_ACCESS_DENIED` 구분
+- 단위 테스트 8개 + Testcontainers 통합 테스트 5개
+
+</details>
+
+---
+
+<details>
+<summary>4단계 — 위시리스트 API</summary>
+
+> 상세 협업 로그: [`docs/collab-log/04-wishlist-api.md`](docs/collab-log/04-wishlist-api.md)
+
+- 5개 엔드포인트: `GET/POST /wishlists`, `PATCH/DELETE /wishlists/{id}`, `POST /wishlists/{id}/move-to-collection`
+- N+1 방지: `@EntityGraph(attributePaths = "catalog")` — 2차 컬렉션 없으므로 QueryDSL 불필요
+- 중복 체크: `existsByUserIdAndCatalogId` 사전 조회 → `409 WISHLIST_ALREADY_EXISTS`
+- `move-to-collection`: `@Transactional` 범위 내에서 collection save → wishlist delete 원자적 실행 (단위 테스트 9개)
+- **교훈**: Plan Mode 진입 없이 구현을 시작했다가 지적. 이후 플랜 승인 후 구현 진행.
+
+</details>
+
+---
+
+<details>
+<summary>5단계 — S3 이미지 업로드</summary>
+
+> 상세 협업 로그: [`docs/collab-log/05-s3-image-upload.md`](docs/collab-log/05-s3-image-upload.md)
+
+- `StorageService` 인터페이스 + `S3StorageService` 구현체 (AWS SDK v2)
+- 3개 엔드포인트: `POST /collections/{id}/images/presigned-url`, `POST /collections/{id}/images`, `DELETE /collections/{id}/images/{imageId}`
+- 파일 검증: contentType(jpeg/png/webp), fileSize(최대 10MB), s3Key 서버 생성(UUID)으로 경로 조작 방지
+- `deleteCollection` 시 S3 이미지 선제 정리 (실패해도 DB 삭제 강행)
+- 단위 테스트 12개
+- **교훈**: `Content-Length-Range`는 PUT Presigned URL 미지원 → 서버 레이어 검증으로 대체
+
+</details>
+
+---
+
+<details>
+<summary>인프라 사전 셋업 — AWS + OAuth2 준비 (2026-05-06)</summary>
+
+> 상세 협업 로그: [`docs/collab-log/infra-aws-prereq.md`](docs/collab-log/infra-aws-prereq.md)
+
+- **AWS S3**: `gunpla-dev-images` 버킷 생성, IAM 최소 권한 정책 (`PutObject`, `GetObject`, `DeleteObject`), CORS 설정
+- **OAuth2 앱 등록**: Google / Kakao / Naver 앱 등록 완료, credentials `application-local.properties` 사전 등록
+- **배포 아키텍처 결정**: ECS + ALB + ACM → EC2 + nginx + Cloudflare Free 전환. ALB 고정비 절감, CDN 무료 확보
+- **도메인 확정**: `vibe.chanyongyang.com`
+- **교훈**: `s3:HeadObject`는 존재하지 않는 IAM 액션. `HeadObject` 요청은 `s3:GetObject`로 커버됨
 
 </details>
