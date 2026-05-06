@@ -6,13 +6,13 @@
 클라이언트 (Swagger UI / 외부 앱)
         │
         ▼
-[AWS ALB]
+[Cloudflare] ← SSL termination + CDN (vibe.chanyongyang.com)
         │
         ▼
-[AWS ECS Fargate] ─── Spring Boot 17 (JAR)
+[AWS EC2 (t3.micro)]  ──  nginx (host) → Docker → Spring Boot JAR
         │
         ├── [AWS Aurora MySQL]   ← JPA + QueryDSL + Flyway
-        └── [AWS S3]             ← 컬렉션 이미지 (Presigned URL)
+        └── [AWS S3]             ← 컬렉션 이미지 (Presigned URL, Cloudflare 프록시 제외)
 ```
 
 ---
@@ -148,7 +148,7 @@ com.chanyong.gunpla
 | API Docs | springdoc-openapi 2.8.8 (Swagger UI) |
 | Test | JUnit 5 + Mockito + Testcontainers |
 | Build | Gradle 8.14.4 |
-| Deploy | AWS ECS Fargate + ECR |
+| Deploy | AWS EC2 (t3.micro) + Docker + nginx (host) + Cloudflare |
 | CI/CD | GitHub Actions |
 
 ---
@@ -227,7 +227,12 @@ com.chanyong.gunpla
 - 엔티티 직접 수정으로 DDL 변경 금지
 - ENUM 대신 VARCHAR 사용 (Hibernate 6 타입 검증 호환)
 
-### 11. 패키징 WAR → JAR
-- ECS Fargate Docker 배포에 적합
-- Embedded Tomcat 포함, 외부 Tomcat 불필요
-- `Dockerfile`: `FROM eclipse-temurin:17-jre`
+### 11. 패키징 WAR → JAR + Docker on EC2
+- Embedded Tomcat 포함 JAR — 외부 Tomcat 불필요
+- 운영 배포: EC2(t3.micro)에 Docker 컨테이너로 실행, nginx는 **호스트에 직접 설치**해 리버스 프록시 역할 (컨테이너 중첩 오버헤드 회피)
+- `Dockerfile`: `FROM eclipse-temurin:17-jre` + layered jar로 빌드 캐시 최적화
+- t3.micro 메모리(1GB) 제약 대응
+  - JVM 힙 명시: `-Xms256m -Xmx512m`
+  - 컨테이너 메모리 limit과 일치시켜 OOM 예측 가능
+  - 인스턴스에 swap 1~2GB 추가 (기본 미할당)
+- ECS Fargate 대신 EC2 + Docker를 택한 이유: 단일 인스턴스 포트폴리오 규모에서 Fargate 비용/학습 곡선보다 EC2 직접 운영 + 컨테이너 경험이 실익 큼. 8단계에서 CD 파이프라인 + 이미지 취약점 스캔을 함께 갖춤
