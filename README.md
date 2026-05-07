@@ -101,7 +101,7 @@ StorageService (인터페이스)
 | 인프라 | AWS S3 + IAM + CORS 셋업, OAuth2 앱 등록 (Google/Kakao/Naver), 배포 아키텍처 결정 | ✅ | [infra-aws-prereq](docs/collab-log/infra-aws-prereq.md) |
 | 5단계 | S3 이미지 업로드 (보안 통제 포함 — 조건부 서명, UUID 키 생성) | ✅ | [05-s3-image-upload](docs/collab-log/05-s3-image-upload.md) |
 | 6단계 | OAuth2 + 실제 JWT + Refresh Token (Google, Kakao, Naver) + 토큰 로테이션 | ✅ | [06-oauth2-jwt](docs/collab-log/06-oauth2-jwt.md) |
-| 7단계 | Rate Limiting + 운영 편의 기능 (Soft Delete 배치, 만료 토큰 정리) | | |
+| 7단계 | Rate Limiting + 운영 편의 기능 (Soft Delete 배치, 만료 토큰 정리) | ✅ | [07-rate-limiting](docs/collab-log/07-rate-limiting.md) |
 | 8단계 | AWS EC2 배포 + Cloudflare 도메인 연결 + 운영 게이트 강화 (EC2 + nginx, Aurora, CD 파이프라인, 보안 스캔) | | |
 
 > 단계 완료 PR에는 협업 로그 링크와 AI 활용 비중(대략 %) 명시  
