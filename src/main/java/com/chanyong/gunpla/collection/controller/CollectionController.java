@@ -4,6 +4,7 @@ import com.chanyong.gunpla.collection.dto.*;
 import com.chanyong.gunpla.collection.service.CollectionImageService;
 import com.chanyong.gunpla.collection.service.CollectionService;
 import com.chanyong.gunpla.global.auth.UserPrincipal;
+import com.chanyong.gunpla.global.ratelimit.RateLimited;
 import com.chanyong.gunpla.global.response.ApiResponse;
 import com.chanyong.gunpla.global.response.PageResponse;
 import jakarta.validation.Valid;
@@ -75,6 +76,7 @@ public class CollectionController {
         collectionService.deleteCollection(principal.getId(), id);
     }
 
+    @RateLimited(limit = 20)
     @PostMapping("/{id}/images/presigned-url")
     public ApiResponse<PresignedUrlResponse> generatePresignedUrl(
         @AuthenticationPrincipal UserPrincipal principal,

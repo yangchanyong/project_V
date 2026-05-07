@@ -3,6 +3,7 @@ package com.chanyong.gunpla.auth.controller;
 import com.chanyong.gunpla.auth.dto.TokenResponse;
 import com.chanyong.gunpla.auth.service.AuthService;
 import com.chanyong.gunpla.global.auth.jwt.JwtProperties;
+import com.chanyong.gunpla.global.ratelimit.RateLimited;
 import com.chanyong.gunpla.global.response.ApiResponse;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +18,7 @@ public class AuthController {
     private final AuthService authService;
     private final JwtProperties jwtProperties;
 
+    @RateLimited(limit = 10, byIp = true)
     @PostMapping("/refresh")
     public ApiResponse<TokenResponse> refresh(
         @CookieValue(name = "refreshToken", required = false) String rawRefreshToken,

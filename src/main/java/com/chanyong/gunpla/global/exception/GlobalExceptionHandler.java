@@ -1,5 +1,6 @@
 package com.chanyong.gunpla.global.exception;
 
+import com.chanyong.gunpla.global.ratelimit.RateLimitException;
 import com.chanyong.gunpla.global.response.ErrorResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -14,6 +15,15 @@ import java.util.stream.Collectors;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(RateLimitException.class)
+    public ResponseEntity<ErrorResponse> handleRateLimitException(RateLimitException e) {
+        ErrorCode errorCode = e.getErrorCode();
+        return ResponseEntity
+            .status(HttpStatus.TOO_MANY_REQUESTS)
+            .header("Retry-After", String.valueOf(e.getRetryAfterSeconds()))
+            .body(new ErrorResponse(errorCode.getCode(), e.getMessage()));
+    }
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ErrorResponse> handleBusinessException(BusinessException e) {
