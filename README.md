@@ -431,6 +431,52 @@ docker.client.strategy=org.testcontainers.dockerclient.EnvironmentAndSystemPrope
 ---
 
 <details>
+<summary>6단계 — OAuth2 + JWT + Refresh Token 인증 (2026-05-07)</summary>
+
+> 상세 협업 로그: [`docs/collab-log/06-oauth2-jwt.md`](docs/collab-log/06-oauth2-jwt.md)
+
+- `JwtProvider` (Access Token 생성/검증), `JwtAuthenticationFilter` (`OncePerRequestFilter`), `JwtProperties` (`@ConfigurationProperties`)
+- `UserPrincipal` — `UserDetails` + `OAuth2User` + `OidcUser` 통합 구현체 (세 인터페이스 동시 구현)
+- `CustomOAuth2UserService` (Kakao/Naver), `CustomOidcUserService` (Google OIDC) 분리 등록
+- `OAuth2SuccessHandler` — JWT 발급 + Refresh Token 쿠키 (`SameSite=Lax`, `Set-Cookie` 헤더 직접 설정)
+- `RefreshTokenService` — SHA-256 해시 저장, 토큰 로테이션, 만료 배치 (`@Scheduled`)
+- `POST /auth/refresh` (토큰 갱신), `DELETE /auth/logout`, `GET/PATCH /users/me` 구현
+- `SecurityConfig` 전면 교체 — Stateless 세션, JWT 필터, 401 EntryPoint
+- `CollectionController`, `WishlistController` — `@RequestHeader("X-User-Id")` → `@AuthenticationPrincipal` 마이그레이션
+
+**트러블슈팅**
+
+<details>
+<summary>Google 로그인 500 ClassCastException — OIDC vs OAuth2 분기 누락</summary>
+
+**원인**: Google은 `scope=openid`를 포함하므로 Spring Security가 `OidcUserService` 코드 경로를 탄다. `CustomOAuth2UserService`만 등록하면 Google 콜백 시 `DefaultOidcUser`가 반환되고, `OAuth2SuccessHandler`에서 `UserPrincipal`로 캐스팅할 때 ClassCastException 발생.
+
+**해결**: `UserPrincipal`에 `OidcUser` 인터페이스 추가, `CustomOidcUserService extends OidcUserService` 신규 작성, `SecurityConfig`에 `.oidcUserService()` 별도 등록.
+
+**교훈**: Google OAuth2는 OIDC(`scope=openid`)와 일반 OAuth2 두 경로가 존재한다. Spring Security는 이를 자동 분기하므로 두 `UserService`를 모두 등록해야 한다.
+</details>
+
+<details>
+<summary>로그아웃 후 /auth/refresh 500 NPE — null 쿠키 미처리</summary>
+
+**원인**: 로그아웃 후 refreshToken 쿠키가 삭제된 상태에서 `/auth/refresh` 재호출 시 `rawRefreshToken`이 null로 주입됨. null 체크 없이 `sha256(null)` 호출 → NPE.
+
+**해결**: `AuthController`에서 `rawRefreshToken == null` 시 즉시 `INVALID_REFRESH_TOKEN` 예외 반환.
+</details>
+
+<details>
+<summary>CI 전체 테스트 실패 — application-local.properties gitignore</summary>
+
+**원인**: `application-local.properties`가 `.gitignore`에 포함되어 있어 GitHub Actions에 올라가지 않음 → JWT secret, OAuth2 client-id 등 필수 프로퍼티 누락으로 Spring Context 생성 실패.
+
+**해결**: `src/test/resources/application-test.properties`에 CI용 stub 값 작성 + 모든 `@SpringBootTest` 클래스에 `@ActiveProfiles("test")` 추가.
+</details>
+
+</details>
+
+---
+
+<details>
 <summary>인프라 사전 셋업 — AWS + OAuth2 준비 (2026-05-06)</summary>
 
 > 상세 협업 로그: [`docs/collab-log/infra-aws-prereq.md`](docs/collab-log/infra-aws-prereq.md)
