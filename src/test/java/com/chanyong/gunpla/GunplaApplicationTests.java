@@ -2,6 +2,7 @@ package com.chanyong.gunpla;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.MySQLContainer;
@@ -10,6 +11,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 @SpringBootTest
 @Testcontainers
+@ActiveProfiles("test")
 class GunplaApplicationTests {
 
     @Container
@@ -20,7 +22,6 @@ class GunplaApplicationTests {
         registry.add("spring.datasource.url", mysql::getJdbcUrl);
         registry.add("spring.datasource.username", mysql::getUsername);
         registry.add("spring.datasource.password", mysql::getPassword);
-        // 테스트에서는 seed 경로 제외 — migration만 적용
         registry.add("spring.flyway.locations", () -> "classpath:db/migration");
     }
 
