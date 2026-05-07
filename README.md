@@ -477,6 +477,35 @@ docker.client.strategy=org.testcontainers.dockerclient.EnvironmentAndSystemPrope
 ---
 
 <details>
+<summary>7단계 — Rate Limiting + Soft Delete 배치 (2026-05-07)</summary>
+
+> 상세 협업 로그: [`docs/collab-log/07-rate-limiting.md`](docs/collab-log/07-rate-limiting.md)
+
+- `@RateLimited` 어노테이션 + `RateLimitAspect` AOP: presigned-url 20건/분(유저), /auth/refresh 10건/분(IP)
+- `RateLimitInterceptor` (HandlerInterceptor): 인증된 전체 API 100건/분(유저) 공통 적용
+- Bucket4j 토큰 버킷 + Caffeine 인메모리 캐시 (TTL 2분, 최대 10,000 버킷)
+- `RateLimitException` → 429 + `Retry-After: 60` 헤더 응답
+- `SoftDeleteCleanupScheduler`: 매일 04:00, 30일 경과 `users`/`user_collection` hard delete + S3 이미지 정리
+- `@SQLRestriction` 우회: native query로 soft-deleted 레코드 조회/삭제
+- 단위 테스트 5개 (한도 이내, 초과, 유저 격리, IP 기반, Retry-After 검증)
+
+**트러블슈팅**
+
+<details>
+<summary>selectConfig() 하드코딩 분기 버그 — 단위 테스트에서 발견</summary>
+
+**원인**: `RateLimitAspect.selectConfig()`가 `limit == 10`, `limit == 20`으로 분기해 미리 정의된 `BucketConfiguration`을 반환했는데, 단위 테스트에서 `limit=3` 등 임의 값을 주면 항상 `generalConfig(100)`으로 폴백되어 테스트가 의도대로 동작하지 않음.
+
+**해결**: `selectConfig()` 삭제, 어노테이션의 `limit` 값을 직접 `Bandwidth`에 적용.
+
+**교훈**: AOP 어노테이션 속성은 내부에서 재해석하지 말고 선언값 그대로 쓰는 것이 테스트 신뢰성에 유리하다.
+</details>
+
+</details>
+
+---
+
+<details>
 <summary>인프라 사전 셋업 — AWS + OAuth2 준비 (2026-05-06)</summary>
 
 > 상세 협업 로그: [`docs/collab-log/infra-aws-prereq.md`](docs/collab-log/infra-aws-prereq.md)

@@ -10,8 +10,8 @@
 | 4단계 | 위시리스트 API | ✅ 완료 | [04-wishlist-api.md](collab-log/04-wishlist-api.md) |
 | 5단계 | S3 이미지 업로드 | ✅ 완료 | [05-s3-image-upload.md](collab-log/05-s3-image-upload.md) |
 | 6단계 | OAuth2 + JWT + Refresh Token | ✅ 완료 | [06-oauth2-jwt.md](collab-log/06-oauth2-jwt.md) |
-| 7단계 | Rate Limiting + 운영 편의 | 🔜 다음 | — |
-| 8단계 | AWS EC2 배포 + CI/CD | ⏳ 대기 | — |
+| 7단계 | Rate Limiting + 운영 편의 | ✅ 완료 | [07-rate-limiting.md](collab-log/07-rate-limiting.md) |
+| 8단계 | AWS EC2 배포 + CI/CD | 🔜 다음 | — |
 
 ---
 
