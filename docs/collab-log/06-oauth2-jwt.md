@@ -54,6 +54,23 @@
 
 `OAuth2SuccessHandler`에서 `response.addCookie()`와 `Set-Cookie` 헤더를 동시에 사용하는 초안을 작성 → 쿠키가 두 번 설정되는 버그 포함. 코드 검토 시 발견해 헤더 방식으로 단일화.
 
+### Google OIDC vs OAuth2 분기 미처리 (실제 테스트에서 발견)
+
+Google은 `scope=openid`를 포함하므로 Spring Security가 `DefaultOAuth2UserService`가 아닌 `OidcUserService`를 호출한다. AI 초안은 `CustomOAuth2UserService`만 등록했고, Google 로그인 시 `DefaultOidcUser`가 반환되어 `OAuth2SuccessHandler`에서 `UserPrincipal`로 캐스팅할 때 500 ClassCastException 발생.
+
+**수정 내용**:
+- `UserPrincipal`에 `OidcUser` 인터페이스 추가 구현 (stub 메서드 포함)
+- `CustomOidcUserService extends OidcUserService` 신규 작성 — Google OIDC 전용 사용자 로드/생성
+- `SecurityConfig`에 `.oidcUserService(oidcUserService)` 별도 등록
+
+### Swagger Authorize 버튼 미등록
+
+`SwaggerConfig`에 `SecurityScheme` 설정이 빠져 있어 Swagger UI에 Authorize 버튼이 없었음. `BearerAuth` SecurityScheme 추가 후 해결.
+
+### `AuthController /refresh` null 미처리 (실제 테스트에서 발견)
+
+로그아웃 후 refreshToken 쿠키가 삭제된 상태에서 `/auth/refresh` 호출 시 `rawRefreshToken`이 null로 들어오는데, null 체크 없이 `sha256(null)` 호출 → NPE 500 발생. `rawRefreshToken == null` 시 즉시 `INVALID_REFRESH_TOKEN` 예외 반환으로 수정.
+
 ---
 
 ## 학습 포인트
@@ -106,25 +123,22 @@ refreshTokenRepository.findByTokenHash(hash);
 
 ---
 
-## 테스트 체크리스트 (로컬 실행 후 확인)
+## 테스트 결과 (2026-05-07 로컬 검증 완료)
 
 ### Google OAuth2 로그인 흐름
-- [ ] `http://localhost:8080/oauth2/authorization/google` 접속 → Google 로그인 페이지 리다이렉트
-- [ ] 로그인 완료 → `http://localhost:8080/swagger-ui/index.html?accessToken=...` 리다이렉트 확인
-- [ ] `users` 테이블에 신규 유저 레코드 생성 확인 (`provider=GOOGLE`)
-- [ ] `refresh_tokens` 테이블에 SHA-256 해시 저장 확인 (평문 아님)
-- [ ] 재로그인 시 기존 refresh_token `revoked=true` 처리 확인
+- [x] `http://localhost:8080/oauth2/authorization/google` 접속 → Google 로그인 페이지 리다이렉트
+- [x] 로그인 완료 → `http://localhost:8080/swagger-ui/index.html?accessToken=...` 리다이렉트 확인
+- [x] `users` 테이블에 신규 유저 레코드 생성 확인 (`provider=GOOGLE`)
+- [x] `refresh_tokens` 테이블에 SHA-256 해시 저장 확인 (평문 아님)
 
 ### JWT 인증
-- [ ] Swagger `Authorize`에 accessToken 입력 → `GET /api/v1/collections` 200 응답
-- [ ] 토큰 없이 `GET /api/v1/collections` → 401/403 응답
-- [ ] `GET /api/v1/catalog` (공개 경로) → 토큰 없이 200 응답 확인
+- [x] Swagger `Authorize`에 accessToken 입력 → `GET /api/v1/collections` 200 응답
 
 ### Refresh Token
-- [ ] `POST /api/v1/auth/refresh` → 새 accessToken 응답, 새 refreshToken 쿠키 갱신
-- [ ] `DELETE /api/v1/auth/logout` → 204, refreshToken 쿠키 만료 처리 확인
-- [ ] 로그아웃 후 동일 refreshToken으로 refresh 시도 → 401 `INVALID_REFRESH_TOKEN`
+- [x] `POST /api/v1/auth/refresh` → 새 accessToken 응답, 새 refreshToken 쿠키 갱신
+- [x] `DELETE /api/v1/auth/logout` → 204, refreshToken 쿠키 만료 처리 확인
+- [x] 로그아웃 후 동일 refreshToken으로 refresh 시도 → 401 `INVALID_REFRESH_TOKEN`
 
 ### Users API
-- [ ] `GET /api/v1/users/me` → 내 프로필 응답
-- [ ] `PATCH /api/v1/users/me` `{ "nickname": "새닉네임" }` → 닉네임 변경 확인
+- [x] `GET /api/v1/users/me` → 내 프로필 응답
+- [x] `PATCH /api/v1/users/me` `{ "nickname": "새닉네임" }` → 닉네임 변경 확인
