@@ -34,6 +34,9 @@ public enum ErrorCode {
     COLLECTION_IMAGE_NOT_FOUND(HttpStatus.NOT_FOUND, "COLLECTION_IMAGE_NOT_FOUND", "이미지를 찾을 수 없습니다."),
     FILE_UPLOAD_VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "FILE_UPLOAD_VALIDATION_FAILED", "파일 형식 또는 크기가 유효하지 않습니다."),
 
+    // 인증
+    INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "INVALID_REFRESH_TOKEN", "유효하지 않거나 만료된 Refresh Token입니다."),
+
     // Rate Limiting
     RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMIT_EXCEEDED", "요청 한도를 초과했습니다.");
 
