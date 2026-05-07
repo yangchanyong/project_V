@@ -100,7 +100,7 @@ StorageService (인터페이스)
 | 4단계 | 위시리스트 API (위시 → 컬렉션 이동 트랜잭션 포함) | ✅ | [04-wishlist-api](docs/collab-log/04-wishlist-api.md) |
 | 인프라 | AWS S3 + IAM + CORS 셋업, OAuth2 앱 등록 (Google/Kakao/Naver), 배포 아키텍처 결정 | ✅ | [infra-aws-prereq](docs/collab-log/infra-aws-prereq.md) |
 | 5단계 | S3 이미지 업로드 (보안 통제 포함 — 조건부 서명, UUID 키 생성) | ✅ | [05-s3-image-upload](docs/collab-log/05-s3-image-upload.md) |
-| 6단계 | OAuth2 + 실제 JWT + Refresh Token (Google, Kakao, Naver) | | |
+| 6단계 | OAuth2 + 실제 JWT + Refresh Token (Google, Kakao, Naver) + 토큰 로테이션 | ✅ | [06-oauth2-jwt](docs/collab-log/06-oauth2-jwt.md) |
 | 7단계 | Rate Limiting + 운영 편의 기능 (Soft Delete 배치, 만료 토큰 정리) | | |
 | 8단계 | AWS EC2 배포 + Cloudflare 도메인 연결 + 운영 게이트 강화 (EC2 + nginx, Aurora, CD 파이프라인, 보안 스캔) | | |
 
