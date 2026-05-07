@@ -5,6 +5,9 @@ import lombok.Getter;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.oauth2.core.oidc.OidcIdToken;
+import org.springframework.security.oauth2.core.oidc.OidcUserInfo;
+import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 
 import java.util.Collection;
@@ -12,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 @Getter
-public class UserPrincipal implements UserDetails, OAuth2User {
+public class UserPrincipal implements UserDetails, OAuth2User, OidcUser {
 
     private final Long id;
     private final String email;
@@ -62,5 +65,22 @@ public class UserPrincipal implements UserDetails, OAuth2User {
     @Override
     public String getName() {
         return String.valueOf(id);
+    }
+
+    // --- OidcUser (Google OIDC 흐름에서 사용, 실제 OIDC 토큰 데이터는 불필요) ---
+
+    @Override
+    public Map<String, Object> getClaims() {
+        return Map.of();
+    }
+
+    @Override
+    public OidcUserInfo getUserInfo() {
+        return null;
+    }
+
+    @Override
+    public OidcIdToken getIdToken() {
+        return null;
     }
 }

@@ -22,6 +22,10 @@ public class AuthController {
         @CookieValue(name = "refreshToken", required = false) String rawRefreshToken,
         HttpServletResponse response
     ) {
+        if (rawRefreshToken == null) {
+            throw new com.chanyong.gunpla.global.exception.BusinessException(
+                com.chanyong.gunpla.global.exception.ErrorCode.INVALID_REFRESH_TOKEN);
+        }
         AuthService.RefreshResult result = authService.refresh(rawRefreshToken);
         setRefreshTokenCookie(response, result.newRawRefreshToken());
         return ApiResponse.of(result.tokenResponse());

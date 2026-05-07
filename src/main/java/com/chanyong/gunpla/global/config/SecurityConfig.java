@@ -3,6 +3,7 @@ package com.chanyong.gunpla.global.config;
 import com.chanyong.gunpla.global.auth.jwt.JwtAuthenticationFilter;
 import com.chanyong.gunpla.global.auth.jwt.JwtProvider;
 import com.chanyong.gunpla.global.auth.oauth2.CustomOAuth2UserService;
+import com.chanyong.gunpla.global.auth.oauth2.CustomOidcUserService;
 import com.chanyong.gunpla.global.auth.oauth2.OAuth2SuccessHandler;
 import com.chanyong.gunpla.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +15,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
@@ -28,6 +30,7 @@ import java.util.List;
 public class SecurityConfig {
 
     private final CustomOAuth2UserService oAuth2UserService;
+    private final CustomOidcUserService oidcUserService;
     private final OAuth2SuccessHandler oAuth2SuccessHandler;
     private final JwtProvider jwtProvider;
     private final UserRepository userRepository;
@@ -50,14 +53,24 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/auth/**").permitAll()
                 .anyRequest().authenticated()
             )
+            .exceptionHandling(ex -> ex.authenticationEntryPoint(unauthorizedEntryPoint()))
             .oauth2Login(oauth2 -> oauth2
-                .userInfoEndpoint(userInfo -> userInfo.userService(oAuth2UserService))
+                .userInfoEndpoint(userInfo -> userInfo
+                    .userService(oAuth2UserService)   // Kakao, Naver (non-OIDC)
+                    .oidcUserService(oidcUserService)  // Google (OIDC)
+                )
                 .successHandler(oAuth2SuccessHandler)
             )
             .addFilterBefore(new JwtAuthenticationFilter(jwtProvider, userRepository),
                 UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    // REST API — 미인증 요청 시 302 리다이렉트 대신 401 반환
+    private AuthenticationEntryPoint unauthorizedEntryPoint() {
+        return (request, response, authException) ->
+            response.sendError(401, "Unauthorized");
     }
 
     @Bean
