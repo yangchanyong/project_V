@@ -88,11 +88,12 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         @SuppressWarnings("unchecked")
         private static OAuthAttributes fromNaver(Map<String, Object> attrs) {
             Map<String, Object> response = (Map<String, Object>) attrs.get("response");
+            String name = (String) response.get("name");
             return new OAuthAttributes(
                 "NAVER",
                 (String) response.get("id"),
                 (String) response.get("email"),
-                (String) response.get("name")
+                name != null ? name : "네이버사용자"
             );
         }
     }
