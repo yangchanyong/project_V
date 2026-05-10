@@ -9,10 +9,9 @@ build/
 src/main/generated/
 
 ### Spring Boot 설정 (민감 정보) ###
+# application-prod.properties는 환경변수 참조만 포함하므로 커밋 대상
 application-local.properties
 application-local.yml
-application-prod.properties
-application-prod.yml
 .env
 
 ### IntelliJ IDEA ###
