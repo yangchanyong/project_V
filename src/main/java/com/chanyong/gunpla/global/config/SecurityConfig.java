@@ -7,6 +7,7 @@ import com.chanyong.gunpla.global.auth.oauth2.CustomOidcUserService;
 import com.chanyong.gunpla.global.auth.oauth2.OAuth2SuccessHandler;
 import com.chanyong.gunpla.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -17,6 +18,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.SimpleUrlAuthenticationFailureHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -24,6 +26,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
 
+@Slf4j
 @Configuration
 @EnableWebSecurity
 @RequiredArgsConstructor
@@ -60,6 +63,10 @@ public class SecurityConfig {
                     .oidcUserService(oidcUserService)  // Google (OIDC)
                 )
                 .successHandler(oAuth2SuccessHandler)
+                .failureHandler((request, response, exception) -> {
+                    log.error("OAuth2 login failed: {}", exception.getMessage(), exception);
+                    response.sendError(401, "OAuth2 login failed: " + exception.getMessage());
+                })
             )
             .addFilterBefore(new JwtAuthenticationFilter(jwtProvider, userRepository),
                 UsernamePasswordAuthenticationFilter.class);
