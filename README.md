@@ -477,6 +477,47 @@ docker.client.strategy=org.testcontainers.dockerclient.EnvironmentAndSystemPrope
 ---
 
 <details>
+<summary>소셜 로그인 실전 검증 — 카카오/네이버 OAuth2 활성화 + 보안 점검 (2026-05-11)</summary>
+
+> 상세 협업 로그: [`docs/collab-log/08-kakao-naver-oauth2-test.md`](docs/collab-log/08-kakao-naver-oauth2-test.md)
+
+- 카카오/네이버 OAuth2 설정 활성화 (`application-local.properties` 주석 해제)
+- 카카오/네이버 로그인 실제 테스트 완료 (신규 사용자 생성 확인)
+- `SecurityConfig` OAuth2 실패 핸들러 추가 (로그인 실패 원인 서버 로그에 기록)
+
+**트러블슈팅**
+
+<details>
+<summary>네이버 첫 로그인 — <code>Column 'nickname' cannot be null</code></summary>
+
+**원인**: `CustomOAuth2UserService.fromNaver()`에서 `response.get("name")`을 null 체크 없이 사용. 사용자가 이름 제공 동의를 하지 않은 경우 null 반환.
+
+**해결**: `name != null ? name : "네이버사용자"` fallback 추가. (카카오의 `fromKakao()`에는 이미 동일 처리가 되어 있었음.)
+</details>
+
+<details>
+<summary>카카오 — <code>[invalid_scope] Invalid scope: account_email</code></summary>
+
+**원인**: 카카오 개발자 콘솔의 **동의항목**에서 "카카오계정(이메일)"이 비활성화 상태. properties에 scope를 적는 것만으로는 부족하고 콘솔에서 명시적 활성화 필요.
+
+**해결**: 카카오 개발자 콘솔 → 카카오 로그인 → 동의항목 → 이메일 "선택 동의" 활성화.
+</details>
+
+<details>
+<summary>카카오 — <code>[invalid_token_response] 401 : [no body]</code></summary>
+
+**원인**: Spring Security 기본 `client-authentication-method`는 `client_secret_basic` (Authorization 헤더 전달). 카카오 토큰 엔드포인트는 `client_secret_post` (POST body 전달)만 지원.
+
+**해결**: `spring.security.oauth2.client.registration.kakao.client-authentication-method=client_secret_post` 추가.
+
+**교훈**: 카카오는 OAuth2 표준 중 POST body 방식만 지원한다. 네이버도 동일 방식이나 기본값이 이미 호환되어 문제 없었음.
+</details>
+
+</details>
+
+---
+
+<details>
 <summary>7단계 — Rate Limiting + Soft Delete 배치 (2026-05-07)</summary>
 
 > 상세 협업 로그: [`docs/collab-log/07-rate-limiting.md`](docs/collab-log/07-rate-limiting.md)
