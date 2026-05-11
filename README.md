@@ -102,7 +102,7 @@ StorageService (인터페이스)
 | 5단계 | S3 이미지 업로드 (보안 통제 포함 — 조건부 서명, UUID 키 생성) | ✅ | [05-s3-image-upload](docs/collab-log/05-s3-image-upload.md) |
 | 6단계 | OAuth2 + 실제 JWT + Refresh Token (Google, Kakao, Naver) + 토큰 로테이션 | ✅ | [06-oauth2-jwt](docs/collab-log/06-oauth2-jwt.md) |
 | 7단계 | Rate Limiting + 운영 편의 기능 (Soft Delete 배치, 만료 토큰 정리) | ✅ | [07-rate-limiting](docs/collab-log/07-rate-limiting.md) |
-| 8단계 | AWS EC2 배포 + Cloudflare 도메인 연결 + 운영 게이트 강화 (EC2 + nginx, Aurora, CD 파이프라인, 보안 스캔) | | |
+| 8단계 | AWS EC2 배포 + Cloudflare 도메인 연결 + 운영 게이트 강화 (EC2 + nginx, Aurora, CD 파이프라인, 보안 스캔) | ✅ | [09-aws-ec2-deploy](docs/collab-log/09-aws-ec2-deploy.md) |
 
 > 단계 완료 PR에는 협업 로그 링크와 AI 활용 비중(대략 %) 명시  
 > 단계 순서 결정 이유: 핵심 비즈니스 API(카탈로그·컬렉션)를 먼저 완성해 빠르게 동작하는 결과물 확보 후, OAuth2·운영 기능을 후순위 배치. 1단계는 테스트용 인증으로 우회하고 6단계에서 실제 OAuth2로 교체.
@@ -145,10 +145,18 @@ StorageService (인터페이스)
 
 ## API 문서
 
-로컬 실행 후 Swagger UI 확인:
+**운영 서버 (인증 없이 바로 사용 가능)**
 
 ```
-http://localhost:8080/swagger-ui.html
+https://vibe.chanyongyang.com
+```
+
+> 소셜 로그인(Google/Kakao/Naver) → URL의 `?accessToken=` 값 복사 → Swagger 우상단 **Authorize** 클릭 후 붙여넣기
+
+**로컬 실행 후 Swagger UI 확인**
+
+```
+http://localhost:8080/swagger-ui/index.html
 ```
 
 상세 API 명세: [`docs/api-spec.md`](docs/api-spec.md)
@@ -556,5 +564,51 @@ docker.client.strategy=org.testcontainers.dockerclient.EnvironmentAndSystemPrope
 - **배포 아키텍처 결정**: ECS + ALB + ACM → EC2 + nginx + Cloudflare Free 전환. ALB 고정비 절감, CDN 무료 확보
 - **도메인 확정**: `vibe.chanyongyang.com`
 - **교훈**: `s3:HeadObject`는 존재하지 않는 IAM 액션. `HeadObject` 요청은 `s3:GetObject`로 커버됨
+
+</details>
+
+---
+
+<details>
+<summary>8단계 — AWS EC2 배포 + CI/CD + Swagger UI 개선 + 전체 코드 문서화 (2026-05-11)</summary>
+
+> 상세 협업 로그: [`docs/collab-log/09-aws-ec2-deploy.md`](docs/collab-log/09-aws-ec2-deploy.md)
+
+- **인프라**: EC2 (t3.micro) + Docker + nginx (host) + Cloudflare (SSL/CDN) + Aurora Serverless v2 (Private Subnet)
+- **CI/CD**: GitHub Actions OIDC 인증 (장기 키 미사용), `production` Environment 수동 승인 보호
+- Javadoc 주석 전체 코드베이스 작성 (34개 파일 — Controller, Service, Entity, Repository, DTO)
+- Swagger `@Operation`, `@Tag`, `@SecurityRequirement` 어노테이션 전체 컨트롤러 추가 (5개)
+- 소셜 로그인 링크 + 인증 가이드를 Swagger UI description에 추가
+- 루트(`/`) 접속 시 Swagger UI 자동 리다이렉트 (`RootController`)
+
+**트러블슈팅**
+
+<details>
+<summary>Docker 컨테이너 크래시 루프 — S3 자격증명 바인딩 누락</summary>
+
+**원인**: `application-prod.properties`에 AWS 자격증명 프로퍼티 바인딩이 없어 S3Config 빈 초기화 실패 → Spring Context 로드 불가.
+
+**해결**: `application-prod.properties`에 `aws.credentials.access-key=${AWS_ACCESS_KEY}`, `aws.credentials.secret-key=${AWS_SECRET_KEY}` 추가.
+
+**교훈**: `.env`에 환경변수가 있어도 `application-*.properties`에서 `${ENV_VAR}` 형태로 바인딩하지 않으면 Spring이 해당 값을 읽지 못한다.
+</details>
+
+<details>
+<summary><code>/swagger-ui.html</code> 401 — Spring Security 경로 패턴 오해</summary>
+
+**원인**: `SecurityConfig`의 `"/swagger-ui/**"` 패턴은 `/swagger-ui/`로 시작하는 경로만 매칭. `/swagger-ui.html`은 suffix가 다른 별개의 경로라 JWT 필터에서 401 반환.
+
+**해결**: `"/swagger-ui.html"`을 `permitAll()`에 명시적으로 추가.
+
+**교훈**: Spring Security Ant 패턴에서 `/foo/**`는 `/foo/`로 시작하는 경로만 커버한다. `/foo.html`은 별도로 추가해야 한다.
+</details>
+
+<details>
+<summary>OAuth2 로그인 후 루트(/)로 이동 — 리다이렉트 URL에 경로 누락</summary>
+
+**원인**: `app.oauth2.redirect-url=https://vibe.chanyongyang.com`으로 설정되어 로그인 성공 후 Swagger UI가 아닌 루트로 이동.
+
+**해결**: `app.oauth2.redirect-url=https://vibe.chanyongyang.com/swagger-ui/index.html`로 수정.
+</details>
 
 </details>
