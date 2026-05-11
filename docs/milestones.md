@@ -11,7 +11,7 @@
 | 5단계 | S3 이미지 업로드 | ✅ 완료 | [05-s3-image-upload.md](collab-log/05-s3-image-upload.md) |
 | 6단계 | OAuth2 + JWT + Refresh Token | ✅ 완료 | [06-oauth2-jwt.md](collab-log/06-oauth2-jwt.md) |
 | 7단계 | Rate Limiting + 운영 편의 | ✅ 완료 | [07-rate-limiting.md](collab-log/07-rate-limiting.md) |
-| 8단계 | AWS EC2 배포 + CI/CD | 🔜 다음 | — |
+| 8단계 | AWS EC2 배포 + CI/CD | ✅ 완료 | [09-aws-ec2-deploy.md](collab-log/09-aws-ec2-deploy.md) |
 
 ---
 
