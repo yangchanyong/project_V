@@ -1,5 +1,5 @@
 name: CD — Deploy to EC2
-# trigger
+# trigger v2
 
 on:
   push:
