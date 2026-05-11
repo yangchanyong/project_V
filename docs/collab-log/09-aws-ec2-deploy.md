@@ -120,6 +120,87 @@ app.oauth2.redirect-url=https://vibe.chanyongyang.com/swagger-ui/index.html
 
 ---
 
+## 3-2. 운영 배포 후 추가 발생한 OAuth2 트러블 — redirect_uri가 HTTP로 생성되는 함정
+
+### 현상
+
+운영 배포 완료 후 소셜 로그인 버튼을 누르면 **세 프로바이더(Google/Kakao/Naver) 모두 실패**. 카카오는 명시적으로 `KOE006` (등록되지 않은 Redirect URI) 에러를 반환했고, Google은 `redirect_uri_mismatch` 페이지가 떴습니다.
+
+### 진단
+
+curl로 OAuth2 진입점이 생성하는 redirect_uri를 직접 확인했습니다:
+
+```bash
+curl -sI "https://vibe.chanyongyang.com/oauth2/authorization/google" | grep Location
+```
+
+응답 헤더의 Location에서 충격적인 부분 발견:
+
+```
+redirect_uri=http://vibe.chanyongyang.com/login/oauth2/code/google
+              ^^^^
+              HTTPS가 아니라 HTTP!
+```
+
+사용자는 분명히 `https://`로 접속했는데, Spring Boot가 프로바이더에 보내는 redirect_uri는 `http://`로 생성되고 있었습니다. 프로바이더에 등록된 URI는 모두 `https://`이므로 일치 실패 → 즉시 거부.
+
+### 원인
+
+```
+사용자 [HTTPS] ──→ Cloudflare [SSL termination] ──→ nginx [HTTP] ──→ Spring Boot
+                                                                       ↑
+                                                          "내가 받은 요청은 HTTP다"
+                                                          → {baseUrl} = http://vibe.chanyongyang.com
+```
+
+Cloudflare가 SSL을 종료시키고 origin(EC2)에는 HTTP로 전달합니다. nginx도 그대로 HTTP로 Spring Boot에 forward합니다. Spring Boot 입장에서는 자기가 받은 요청이 HTTP이므로 `redirect-uri={baseUrl}/login/oauth2/code/google` 의 `{baseUrl}`이 `http://...`로 치환됩니다.
+
+Cloudflare/nginx는 원본 프로토콜을 `X-Forwarded-Proto: https` 헤더로 전달하지만, **Spring Boot는 기본적으로 이 헤더를 신뢰하지 않습니다.** 보안상 신뢰할 수 없는 프록시로부터의 위조를 막기 위한 기본 동작입니다.
+
+### 해결
+
+`application-prod.properties`에 한 줄 추가:
+
+```properties
+server.forward-headers-strategy=framework
+```
+
+이 설정으로 Spring이 `X-Forwarded-Proto`, `X-Forwarded-Host`, `X-Forwarded-Port` 헤더를 신뢰하여 `{baseUrl}`을 올바르게 `https://vibe.chanyongyang.com`으로 해석합니다.
+
+옵션은 두 가지:
+- `framework` — Spring 자체 필터(`ForwardedHeaderFilter`)로 처리. 더 명시적이고 테스트 용이.
+- `native` — 내장 Tomcat의 `RemoteIpValve`로 처리. 더 저수준.
+
+운영 환경이 Cloudflare 뒤이므로 어느 쪽이든 동작하지만, 표준 Servlet 필터 기반인 `framework`를 선택했습니다.
+
+### 추가로 필요했던 작업: OAuth2 프로바이더 콘솔 등록
+
+Spring 설정만 고친다고 끝나지 않습니다. 각 프로바이더 콘솔에 운영 도메인의 Redirect URI를 등록해야 합니다.
+
+| 프로바이더 | 콘솔 위치 | 등록할 URI |
+|------------|----------|-----------|
+| Google | Google Cloud Console → API 및 서비스 → 사용자 인증 정보 → OAuth 2.0 클라이언트 → 승인된 리디렉션 URI | `https://vibe.chanyongyang.com/login/oauth2/code/google` |
+| Kakao | Kakao Developers → 내 애플리케이션 → 카카오 로그인 → Redirect URI | `https://vibe.chanyongyang.com/login/oauth2/code/kakao` |
+| Naver | Naver Developers → 내 애플리케이션 → API 설정 → Callback URL | `https://vibe.chanyongyang.com/login/oauth2/code/naver` |
+
+카카오는 추가로 **앱 설정 → 플랫폼 → Web** 에 사이트 도메인(`https://vibe.chanyongyang.com`)도 등록해야 합니다.
+
+### 검증
+
+```bash
+curl -sI "https://vibe.chanyongyang.com/oauth2/authorization/kakao" | grep Location
+```
+
+응답에서 `redirect_uri=https://vibe.chanyongyang.com/login/oauth2/code/kakao`로 바뀐 것을 확인. 이후 세 프로바이더 모두 정상 로그인 완료.
+
+### 교훈
+
+리버스 프록시 뒤에 있는 Spring Boot 애플리케이션에서 **OAuth2뿐 아니라 절대 URL을 생성하는 모든 기능**(이메일 인증 링크, 비밀번호 재설정 URL, 파일 다운로드 절대 경로 등)이 동일한 함정에 빠질 수 있습니다. `server.forward-headers-strategy`는 운영 배포 단계의 필수 체크리스트로 기억해야 합니다.
+
+또한 OAuth2 디버깅에서 **프로바이더 페이지에 도달하기 전에 Spring이 생성하는 redirect_uri를 curl로 먼저 확인**하는 습관이 중요합니다. 프로바이더 에러 페이지("KOE006", "redirect_uri_mismatch")만 보면 콘솔 등록 문제로 오인할 수 있지만, 실제로는 클라이언트(우리 서버)가 보내는 값 자체가 잘못되어 있는 경우가 더 흔합니다.
+
+---
+
 ## 4. Swagger UI 소셜 로그인 가이드 추가
 
 Swagger UI만으로 처음 방문한 사람이 API를 사용해볼 수 있도록, `SwaggerConfig`의 API 설명에 소셜 로그인 링크와 인증 방법을 추가했습니다:
@@ -239,6 +320,8 @@ Swagger 개선 작업 도중 "본인 데이터만 접근 가능한가?"라는 �
 | 4 | 루트(`/`) 401 | SecurityConfig에 `"/"` permitAll 누락 | 추가 + RootController 신규 생성 |
 | 5 | 로그인 후 루트로 이동 | `app.oauth2.redirect-url`에 `/swagger-ui/index.html` 경로 누락 | URL 수정 |
 | 6 | CollectionController 컴파일 경고 | 잘못된 swagger ApiResponse import 잔재 | import 라인 제거 별도 커밋 |
+| 7 | OAuth2 redirect_uri가 HTTP로 생성됨 | Cloudflare SSL termination 뒤에서 Spring이 X-Forwarded-Proto 헤더 미신뢰 | `server.forward-headers-strategy=framework` 추가 |
+| 8 | 카카오 KOE006 / Google redirect_uri_mismatch | 프로바이더 콘솔에 운영 도메인 Redirect URI 미등록 | Google/Kakao/Naver 콘솔 각각에 `https://vibe.chanyongyang.com/login/oauth2/code/{provider}` 등록 |
 
 ---
 
