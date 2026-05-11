@@ -18,6 +18,10 @@ import lombok.NoArgsConstructor;
         columnNames = {"user_id", "catalog_id"}
     )
 )
+/**
+ * 유저 위시리스트 엔티티.
+ * (user_id, catalog_id) 조합에 UNIQUE 제약이 걸려 있어 같은 카탈로그를 중복 추가할 수 없다.
+ */
 public class Wishlist extends BaseTimeEntity {
 
     @Id
@@ -46,6 +50,12 @@ public class Wishlist extends BaseTimeEntity {
         this.memo = memo;
     }
 
+    /**
+     * 우선순위와 메모를 수정한다.
+     *
+     * @param priority 우선순위
+     * @param memo     메모
+     */
     public void update(String priority, String memo) {
         this.priority = priority;
         this.memo = memo;

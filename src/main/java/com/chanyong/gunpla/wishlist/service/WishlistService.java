@@ -19,6 +19,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+/**
+ * 위시리스트 CRUD 및 컬렉션 이동 서비스.
+ * 모든 쓰기 작업은 {@link #findOwnedWishlist}로 소유권을 먼저 검증한다.
+ */
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -29,6 +33,16 @@ public class WishlistService {
     private final CatalogRepository catalogRepository;
     private final CollectionRepository collectionRepository;
 
+    /**
+     * 내 위시리스트 목록을 조회한다.
+     * priority 파라미터가 있으면 필터링하고, 없으면 전체를 반환한다.
+     * catalog는 @EntityGraph로 함께 로딩한다 (N+1 방지).
+     *
+     * @param userId   로그인 유저 ID
+     * @param priority 우선순위 필터 (null이면 전체)
+     * @param pageable 페이지 정보
+     * @return 페이징된 위시리스트 목록
+     */
     public PageResponse<WishlistResponse> getWishlists(Long userId, String priority, Pageable pageable) {
         if (pageable.getPageSize() > 100) {
             throw new BusinessException(ErrorCode.INVALID_INPUT);
@@ -40,6 +54,14 @@ public class WishlistService {
         return PageResponse.of(page.map(WishlistResponse::from));
     }
 
+    /**
+     * 위시리스트에 카탈로그를 추가한다.
+     * (userId, catalogId) 조합이 이미 존재하면 WISHLIST_ALREADY_EXISTS(409) 예외를 던진다.
+     *
+     * @param userId 로그인 유저 ID
+     * @param req    카탈로그 ID, 우선순위, 메모
+     * @return 생성된 위시리스트 ID
+     */
     @Transactional
     public WishlistCreateResponse createWishlist(Long userId, WishlistCreateRequest req) {
         if (wishlistRepository.existsByUserIdAndCatalogId(userId, req.catalogId())) {
@@ -60,6 +82,14 @@ public class WishlistService {
         return new WishlistCreateResponse(wishlistRepository.save(wishlist).getId());
     }
 
+    /**
+     * 위시리스트 우선순위·메모를 수정한다.
+     *
+     * @param userId 로그인 유저 ID
+     * @param id     위시리스트 PK
+     * @param req    수정할 우선순위, 메모
+     * @return 수정된 위시리스트 ID
+     */
     @Transactional
     public WishlistCreateResponse updateWishlist(Long userId, Long id, WishlistUpdateRequest req) {
         Wishlist wishlist = findOwnedWishlist(id, userId);
@@ -67,12 +97,27 @@ public class WishlistService {
         return new WishlistCreateResponse(wishlist.getId());
     }
 
+    /**
+     * 위시리스트 항목을 삭제한다.
+     *
+     * @param userId 로그인 유저 ID
+     * @param id     위시리스트 PK
+     */
     @Transactional
     public void deleteWishlist(Long userId, Long id) {
         Wishlist wishlist = findOwnedWishlist(id, userId);
         wishlistRepository.delete(wishlist);
     }
 
+    /**
+     * 위시리스트 항목을 컬렉션으로 이동한다.
+     * 하나의 트랜잭션에서 컬렉션 생성 후 위시리스트를 삭제하므로 원자적으로 처리된다.
+     *
+     * @param userId 로그인 유저 ID
+     * @param id     위시리스트 PK
+     * @param req    컬렉션에 넣을 구매 정보
+     * @return 생성된 컬렉션 ID
+     */
     @Transactional
     public MoveToCollectionResponse moveToCollection(Long userId, Long id, MoveToCollectionRequest req) {
         Wishlist wishlist = findOwnedWishlist(id, userId);
@@ -95,6 +140,14 @@ public class WishlistService {
         return new MoveToCollectionResponse(saved.getId());
     }
 
+    /**
+     * 위시리스트를 조회하고 소유권을 검증한다.
+     *
+     * @param id     위시리스트 PK
+     * @param userId 소유자 유저 ID
+     * @return 검증된 위시리스트 엔티티
+     * @throws com.chanyong.gunpla.global.exception.BusinessException WISHLIST_NOT_FOUND(404), WISHLIST_ACCESS_DENIED(403)
+     */
     private Wishlist findOwnedWishlist(Long id, Long userId) {
         Wishlist wishlist = wishlistRepository.findById(id)
             .orElseThrow(() -> new BusinessException(ErrorCode.WISHLIST_NOT_FOUND));
