@@ -4,6 +4,10 @@ import com.chanyong.gunpla.catalog.entity.GunplaCatalog;
 
 import java.time.LocalDate;
 
+/**
+ * 카탈로그 단건 응답 DTO.
+ * {@link com.chanyong.gunpla.catalog.entity.GunplaCatalog} 엔티티를 클라이언트에 노출하는 형태로 변환한다.
+ */
 public record CatalogResponse(
     Long id,
     String name,
