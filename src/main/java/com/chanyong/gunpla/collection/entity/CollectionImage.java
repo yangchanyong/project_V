@@ -10,6 +10,11 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @Entity
 @Table(name = "collection_images")
+/**
+ * 컬렉션 이미지 엔티티.
+ * S3에 저장된 이미지의 키와 표시 순서를 관리한다.
+ * 실제 이미지 URL은 {@link com.chanyong.gunpla.infrastructure.storage.StorageService#generateGetPresignedUrl}로 생성한다.
+ */
 public class CollectionImage extends BaseTimeEntity {
 
     @Id

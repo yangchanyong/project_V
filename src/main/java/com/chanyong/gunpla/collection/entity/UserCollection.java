@@ -26,6 +26,11 @@ import java.util.List;
 )
 @SQLDelete(sql = "UPDATE user_collection SET deleted_at = NOW(6) WHERE id = ?")
 @SQLRestriction("deleted_at IS NULL")
+/**
+ * 유저의 건프라 컬렉션 엔티티.
+ * Soft Delete 적용 — 삭제 시 deleted_at 컬럼에 시각이 기록되고 조회에서 자동 제외된다.
+ * 빌드 상태 전이 규칙은 {@link BuildStatus#validateTransitionTo}에서 강제한다.
+ */
 public class UserCollection extends SoftDeletableEntity {
 
     @Id
@@ -76,11 +81,26 @@ public class UserCollection extends SoftDeletableEntity {
         this.memo = memo;
     }
 
+    /**
+     * 빌드 상태를 변경한다. 허용되지 않는 전이면 예외가 발생한다.
+     *
+     * @param next 변경할 빌드 상태
+     * @throws com.chanyong.gunpla.global.exception.BusinessException INVALID_STATUS_TRANSITION(400)
+     */
     public void changeBuildStatus(BuildStatus next) {
         this.buildStatus.validateTransitionTo(next);
         this.buildStatus = next;
     }
 
+    /**
+     * 구매 정보와 메모를 수정한다.
+     *
+     * @param purchasePrice    구매 가격
+     * @param purchaseCurrency 통화 코드 (예: KRW, JPY)
+     * @param purchaseDate     구매 일자
+     * @param purchasePlace    구매처
+     * @param memo             메모
+     */
     public void update(Integer purchasePrice, String purchaseCurrency,
                        LocalDate purchaseDate, String purchasePlace, String memo) {
         this.purchasePrice = purchasePrice;
