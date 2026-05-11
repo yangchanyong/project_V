@@ -5,6 +5,8 @@ import com.chanyong.gunpla.auth.service.AuthService;
 import com.chanyong.gunpla.global.auth.jwt.JwtProperties;
 import com.chanyong.gunpla.global.ratelimit.RateLimited;
 import com.chanyong.gunpla.global.response.ApiResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -14,6 +16,7 @@ import org.springframework.web.bind.annotation.*;
  * 토큰 갱신 및 로그아웃 API.
  * Refresh Token은 HttpOnly 쿠키로 전달받으며, 인증 없이 접근 가능하다.
  */
+@Tag(name = "Auth", description = "토큰 갱신 및 로그아웃 (Refresh Token 쿠키 사용, 인증 불필요)")
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
@@ -30,6 +33,7 @@ public class AuthController {
      * @param response        새 Refresh Token 쿠키 설정용
      * @return 새 Access Token과 만료 시간
      */
+    @Operation(summary = "토큰 갱신", description = "Refresh Token 쿠키로 새 Access Token과 Refresh Token을 발급한다 (토큰 로테이션). IP당 분당 10건 제한.")
     @RateLimited(limit = 10, byIp = true)
     @PostMapping("/refresh")
     public ApiResponse<TokenResponse> refresh(
@@ -52,6 +56,7 @@ public class AuthController {
      * @param rawRefreshToken HttpOnly 쿠키의 Refresh Token (없을 수도 있음)
      * @param response        쿠키 삭제용
      */
+    @Operation(summary = "로그아웃", description = "Refresh Token을 무효화하고 쿠키를 삭제한다. 쿠키 없이도 정상 처리된다.")
     @DeleteMapping("/logout")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void logout(
