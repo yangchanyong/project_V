@@ -10,6 +10,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * 토큰 갱신 및 로그아웃 API.
+ * Refresh Token은 HttpOnly 쿠키로 전달받으며, 인증 없이 접근 가능하다.
+ */
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
@@ -18,6 +22,14 @@ public class AuthController {
     private final AuthService authService;
     private final JwtProperties jwtProperties;
 
+    /**
+     * Refresh Token으로 Access Token과 Refresh Token을 재발급한다 (토큰 로테이션).
+     * IP당 분당 10건으로 Rate Limit이 걸려있다.
+     *
+     * @param rawRefreshToken HttpOnly 쿠키의 Refresh Token
+     * @param response        새 Refresh Token 쿠키 설정용
+     * @return 새 Access Token과 만료 시간
+     */
     @RateLimited(limit = 10, byIp = true)
     @PostMapping("/refresh")
     public ApiResponse<TokenResponse> refresh(
@@ -33,6 +45,13 @@ public class AuthController {
         return ApiResponse.of(result.tokenResponse());
     }
 
+    /**
+     * 로그아웃 처리. Refresh Token을 revoke하고 쿠키를 만료시킨다.
+     * 쿠키가 없어도 정상 처리된다 (이미 만료된 상태로 간주).
+     *
+     * @param rawRefreshToken HttpOnly 쿠키의 Refresh Token (없을 수도 있음)
+     * @param response        쿠키 삭제용
+     */
     @DeleteMapping("/logout")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void logout(

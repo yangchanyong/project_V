@@ -19,22 +19,30 @@ import java.time.LocalDateTime;
         @Index(name = "idx_refresh_tokens_expires_at", columnList = "expires_at")
     }
 )
+/**
+ * Refresh Token 엔티티.
+ * 보안을 위해 토큰 원본은 저장하지 않으며 SHA-256 해시값만 DB에 보관한다.
+ */
 public class RefreshToken extends BaseTimeEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /** 토큰 소유자 */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
+    /** rawRefreshToken의 SHA-256 해시값 */
     @Column(name = "token_hash", nullable = false)
     private String tokenHash;
 
+    /** 토큰 만료 일시 */
     @Column(name = "expires_at", nullable = false, columnDefinition = "DATETIME(6)")
     private LocalDateTime expiresAt;
 
+    /** 명시적 무효화 여부 (로그아웃·토큰 로테이션 시 true) */
     @Column(nullable = false)
     private boolean revoked = false;
 
@@ -45,6 +53,9 @@ public class RefreshToken extends BaseTimeEntity {
         this.expiresAt = expiresAt;
     }
 
+    /**
+     * 토큰을 무효화한다.
+     */
     public void revoke() {
         this.revoked = true;
     }
