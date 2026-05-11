@@ -38,7 +38,9 @@ jobs:
           key: gradle-${{ hashFiles('**/*.gradle*') }}
 
       - name: Build JAR (skip tests)
-        run: ./gradlew build -x test --no-daemon
+        run: |
+          chmod +x gradlew
+          ./gradlew build -x test --no-daemon
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
