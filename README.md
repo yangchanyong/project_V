@@ -1,5 +1,25 @@
 # 건프라 인벤토리 플랫폼 × Claude Code AI 협업 실증
 
+![Java](https://img.shields.io/badge/Java-17-blue)
+![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.5.0-brightgreen)
+![AWS](https://img.shields.io/badge/AWS-EC2_Aurora_S3-orange)
+![Docker](https://img.shields.io/badge/Docker-container-blue)
+![CI/CD](https://img.shields.io/badge/CI%2FCD-GitHub_Actions-black)
+
+**🔗 Live:** [https://vibe.chanyongyang.com](https://vibe.chanyongyang.com)  
+*(소셜 로그인 → URL의 accessToken 복사 → Swagger Authorize → API 호출)*
+
+---
+
+- Java 17 + Spring Boot 3.5 기반 건프라 인벤토리 REST API
+- OAuth2(Google/Kakao/Naver) + JWT + Refresh Token Rotation 구현
+- S3 Presigned URL 기반 이미지 업로드, Bucket4j Rate Limiting
+- QueryDSL 동적 검색, Flyway migration, Testcontainers 기반 테스트
+- GitHub Actions CI/CD + EC2 Docker 배포 (Aurora Serverless v2, Cloudflare)
+- Claude Code 기반 AI 협업 프로세스를 CLAUDE.md와 collab-log로 통제
+
+---
+
 > **1차 목표**: Claude Code 기반 바이브코딩 + 하네스 엔지니어링 워크플로우 실증  
 > **2차 목표**: Spring Boot / AWS / CI/CD 기술 스택 유기적 통합  
 > **3차 목표**: 건프라(건담 플라스틱 모델) 컬렉션 관리 REST API 플랫폼 완성
