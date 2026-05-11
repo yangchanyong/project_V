@@ -13,6 +13,10 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 
 import java.time.Duration;
 
+/**
+ * AWS S3 기반 스토리지 서비스 구현체.
+ * SDK v2 S3Presigner를 사용하며, PUT은 5분 / GET은 1시간 Presigned URL을 생성한다.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor

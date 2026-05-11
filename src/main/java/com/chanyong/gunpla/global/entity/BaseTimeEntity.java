@@ -13,6 +13,11 @@ import java.time.LocalDateTime;
 @Getter
 @MappedSuperclass
 @EntityListeners(AuditingEntityListener.class)
+/**
+ * 생성·수정 시각을 자동으로 관리하는 베이스 엔티티.
+ * JPA Auditing을 통해 createdAt과 updatedAt이 자동으로 채워진다.
+ * 모든 엔티티는 이 클래스를 상속받는다.
+ */
 public abstract class BaseTimeEntity {
 
     @CreatedDate

@@ -17,10 +17,21 @@ import java.util.Map;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+/**
+ * Kakao · Naver 소셜 로그인 처리 서비스 (non-OIDC).
+ * 로그인 성공 시 DB에서 기존 계정을 찾거나 신규 계정을 생성한 뒤 {@link UserPrincipal}을 반환한다.
+ */
 public class CustomOAuth2UserService extends DefaultOAuth2UserService {
 
     private final UserRepository userRepository;
 
+    /**
+     * 소셜 로그인 후 유저 정보를 로드한다.
+     * provider별 attribute 구조가 다르므로 {@link OAuthAttributes}에서 정규화한다.
+     *
+     * @param userRequest OAuth2 로그인 요청 정보
+     * @return 인증된 유저의 {@link UserPrincipal}
+     */
     @Override
     @Transactional
     public OAuth2User loadUser(OAuth2UserRequest userRequest) throws OAuth2AuthenticationException {
