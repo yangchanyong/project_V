@@ -2,21 +2,29 @@
 
 ![Java](https://img.shields.io/badge/Java-17-blue)
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.5.0-brightgreen)
-![AWS](https://img.shields.io/badge/AWS-EC2_Aurora_S3-orange)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-336791)
 ![Docker](https://img.shields.io/badge/Docker-container-blue)
-![CI/CD](https://img.shields.io/badge/CI%2FCD-GitHub_Actions-black)
+![Migration](https://img.shields.io/badge/Migration-AWS%E2%86%92ARK-yellow)
 
-**🔗 Live:** [https://vibe.chanyongyang.com](https://vibe.chanyongyang.com)  
-*(소셜 로그인 → URL의 accessToken 복사 → Swagger Authorize → API 호출)*
+> **현재 상태**: AWS(Aurora MySQL) 기반 8단계 배포 이력 이후, **ARK 이관을 위한 PostgreSQL 코드 전환 완료 (2026-09-09)**.
+> 실제 ARK 배포·오브젝트 스토리지 연결·CI/CD 재배선은 **진행 중**이며, 아래 [ARK 이전 현황](#ark-이전-현황) 섹션에 항상성/진행상황을 정리합니다.
 
 ---
 
+**완료된 작업 (현시점 사실)**
+
 - Java 17 + Spring Boot 3.5 기반 건프라 인벤토리 REST API
 - OAuth2(Google/Kakao/Naver) + JWT + Refresh Token Rotation 구현
-- S3 Presigned URL 기반 이미지 업로드, Bucket4j Rate Limiting
-- QueryDSL 동적 검색, Flyway migration, Testcontainers 기반 테스트
-- GitHub Actions CI/CD + EC2 Docker 배포 (Aurora Serverless v2, Cloudflare)
+- Presigned URL 기반 이미지 업로드, Bucket4j Rate Limiting
+- QueryDSL 동적 검색, **PostgreSQL 17 + vendor-specific Flyway migration**
+- **PostgreSQL Testcontainers 통합 테스트** — `./gradlew test` **52 tests all pass**
 - Claude Code 기반 AI 협업 프로세스를 CLAUDE.md와 collab-log로 통제
+
+**과거 운영 이력 (Historical Experience — 상세는 하단 8단계 참조)**
+
+- AWS EC2 (t3.micro) + Docker + nginx + Cloudflare + **Aurora Serverless v2 (MySQL)** + AWS S3 조합으로 실제 배포·운영한 이력
+- GitHub Actions OIDC 인증 기반 CD 파이프라인 구축 이력
+- 도메인 `vibe.chanyongyang.com`은 과거 배포 URL. 현재 실제 서비스 중인지는 별도 검증하지 않았음
 
 ---
 
@@ -57,25 +65,44 @@ AI가 일관되고 안전하게 동작하도록 **환경을 설계하는 것**.
 
 ## 기술 스택
 
+현재 코드베이스가 사용하는 스택(굵게)과, 과거 AWS 운영 시점의 스택(괄호)을 함께 표기합니다.
+
 | 분류 | 기술 |
 |------|------|
 | Language | Java 17 |
 | Framework | Spring Boot 3.5.0 |
 | ORM | Spring Data JPA + QueryDSL 5.1.0 (jakarta) |
-| Database | MySQL 8.0 / AWS Aurora MySQL |
-| Migration | Flyway |
+| Database | **PostgreSQL 17 (로컬 컨테이너 `gunpla_postgres`, host 5433)**<br>*(Historical: MySQL 8.0 / AWS Aurora Serverless v2 MySQL)* |
+| Migration | Flyway (`flyway-database-postgresql`) — vendor-specific 경로 분리 (`db/migration/mysql`, `db/migration/postgresql`) |
 | Auth | Spring Security + OAuth2 (Google, Kakao, Naver) + JWT (jjwt 0.12.6) |
-| Storage | AWS S3 (SDK v2, Presigned URL) |
+| Storage | 코드는 AWS SDK v2 S3 클라이언트 사용 (Presigned URL). **ARK 이관 시 S3-compatible Object Storage로 재연결 예정** *(Historical: AWS S3 `gunpla-dev-images` 버킷 운영 이력)* |
 | Rate Limit | Bucket4j + Caffeine (로컬) / Redis 전환 가능 (운영 확장 시) |
 | API Docs | Swagger UI (springdoc-openapi) |
-| Test | JUnit 5 + Mockito + Testcontainers |
+| Test | JUnit 5 + Mockito + **Testcontainers (`postgres:17`)** |
 | Build | Gradle |
-| Deploy | AWS EC2 (t3.micro) + Docker + nginx (host) + Cloudflare |
-| CI/CD | GitHub Actions |
+| Deploy | **미확정 — ARK 이관 대상 (In Progress)**<br>*(Historical: AWS EC2 t3.micro + Docker + nginx (host) + Cloudflare)* |
+| CI/CD | **ARK 대상 파이프라인 재배선 예정 (Planned)**<br>*(Historical: GitHub Actions OIDC 인증 기반 CD로 EC2에 배포)* |
 
 ---
 
 ## 시스템 아키텍처
+
+### 현재 (로컬 개발 · ARK 이관 진행 중)
+
+```
+클라이언트 (Swagger UI / 외부 앱)
+        │
+        ▼
+Spring Boot 3.5 (Java 17)
+    ├── JPA + QueryDSL + Flyway  →  PostgreSQL 17 (로컬 컨테이너 gunpla_postgres:5433)
+    └── StorageService (S3 SDK v2, Presigned URL) →  Object Storage (ARK 대상 재연결 대기)
+
+ARK 실제 배포 대상(nginx/리버스 프록시/도메인/CI-CD 재배선)은 확정 전 상태.
+```
+
+### Previous Production Architecture (AWS — Historical)
+
+과거 실제 배포하여 운영한 이력. 현재는 이관 진행 중이며 URL의 현재 상태는 별도 검증하지 않음.
 
 ```
 클라이언트 (Swagger UI / 외부 앱)
@@ -86,11 +113,11 @@ AI가 일관되고 안전하게 동작하도록 **환경을 설계하는 것**.
         ▼
 [AWS EC2 (t3.micro)]  ──  nginx (host) → Docker → Spring Boot JAR
         │
-        ├── [AWS Aurora MySQL]   ← JPA + QueryDSL + Flyway
-        └── [AWS S3]             ← 컬렉션 이미지 (Presigned URL, Cloudflare 프록시 제외)
+        ├── [AWS Aurora Serverless v2 (MySQL)]   ← JPA + QueryDSL + Flyway
+        └── [AWS S3]                              ← 컬렉션 이미지 (Presigned URL)
 ```
 
-**레이어 구조**
+**레이어 구조 (DB만 벤더 교체, 나머지는 동일)**
 ```
 Controller (HTTP 요청/응답, DTO)
     │
@@ -101,10 +128,10 @@ Service (비즈니스 로직, @Transactional)
 Repository (JPA + QueryDSL)
     │
     ▼
-DB (MySQL / Aurora)
+DB (현재: PostgreSQL / Historical: MySQL, Aurora MySQL)
 
 StorageService (인터페이스)
-    ├── S3StorageService   ← 운영
+    ├── S3StorageService   ← AWS S3 운영 이력 / ARK 이관 시 S3-compatible 재타겟
     └── LocalStorageService ← 로컬 개발
 ```
 
@@ -123,9 +150,40 @@ StorageService (인터페이스)
 | 6단계 | OAuth2 + 실제 JWT + Refresh Token (Google, Kakao, Naver) + 토큰 로테이션 | ✅ | [06-oauth2-jwt](docs/collab-log/06-oauth2-jwt.md) |
 | 7단계 | Rate Limiting + 운영 편의 기능 (Soft Delete 배치, 만료 토큰 정리) | ✅ | [07-rate-limiting](docs/collab-log/07-rate-limiting.md) |
 | 8단계 | AWS EC2 배포 + Cloudflare 도메인 연결 + 운영 게이트 강화 (EC2 + nginx, Aurora, CD 파이프라인, 보안 스캔) | ✅ | [09-aws-ec2-deploy](docs/collab-log/09-aws-ec2-deploy.md) |
+| 9단계 | **PostgreSQL 코드 전환 (Aurora MySQL → PostgreSQL 17)** — vendor-specific Flyway migration 분리, Testcontainers 전환, 52 tests pass. **ARK 실제 배포·오브젝트 스토리지·CI/CD 이관은 In Progress** | 🟡 부분 완료 | (작성 예정) |
 
 > 단계 완료 PR에는 협업 로그 링크와 AI 활용 비중(대략 %) 명시  
 > 단계 순서 결정 이유: 핵심 비즈니스 API(카탈로그·컬렉션)를 먼저 완성해 빠르게 동작하는 결과물 확보 후, OAuth2·운영 기능을 후순위 배치. 1단계는 테스트용 인증으로 우회하고 6단계에서 실제 OAuth2로 교체.
+
+---
+
+## ARK 이전 현황
+
+Aurora MySQL 전제를 폐기하고 최종 배포 대상을 **ARK**로 확정한 뒤 진행 중인 이관 상태를 항목별로 명시합니다.
+
+### ✅ 완료 (2026-09-09 기준)
+
+- **PostgreSQL 코드 전환** — `AUTO_INCREMENT` → `GENERATED BY DEFAULT AS IDENTITY`, `DATETIME(6)` → `TIMESTAMP(6)`, `TINYINT(1)` → `BOOLEAN` 등 스키마 변환
+- **Entity `columnDefinition` MySQL 종속 제거** — `BaseTimeEntity`, `SoftDeletableEntity`, `RefreshToken`의 `DATETIME(6)` 지정 제거 → Hibernate 기본 timestamp 매핑 사용
+- **Vendor-specific Flyway migration 경로 분리**
+  - `db/migration/mysql/` — 기존 MySQL 원본 파일 이동 (체크섬 무변경, 참고용 보존)
+  - `db/migration/postgresql/` — PostgreSQL 문법 신규 파일 (V1/V2/V4)
+  - `db/seed/mysql/`, `db/seed/postgresql/` — 시드도 동일 패턴
+- **PostgreSQL Testcontainers 전환** — `MySQLContainer("mysql:8.0")` → `PostgreSQLContainer("postgres:17")`, 테스트용 JDBC 문법(`NOW(6)` → `NOW()`, `LAST_INSERT_ID()` → `INSERT ... RETURNING id`) 정리
+- **전체 테스트 통과** — `./gradlew test` → **52 tests, 0 failures, 0 errors, 0 skipped**
+- **`application-prod.properties` 코멘트/설정 정리** — `${DB_URL}` 환경변수 외부화 유지, Flyway location을 `db/migration/postgresql`로 지정
+
+### 🟡 In Progress / Planned
+
+- **ARK 실제 배포** — ARK 인프라 프로비저닝, 리버스 프록시/도메인 설정 미확정. `application-prod.properties`의 `DB_URL`/자격증명은 env 위임 상태로만 대기
+- **S3-compatible Object Storage 이전** — 코드는 AWS SDK v2 S3 클라이언트를 그대로 사용하며 endpoint override 방식으로 재연결할 예정. 실제 버킷/자격증명 미확정
+- **CI/CD 이전** — GitHub Actions의 배포 워크플로우는 AWS EC2를 대상으로 작성되어 있으며, ARK 대상 파이프라인 재작성 필요
+
+### 📚 Historical Experience (보존)
+
+- AWS EC2 (t3.micro) + Docker + nginx + Cloudflare + Aurora Serverless v2 MySQL + AWS S3 조합으로 실제 배포·운영한 이력
+- GitHub Actions OIDC 인증 기반 CD 파이프라인 구축 이력 (`production` Environment 수동 승인 게이트 포함)
+- 위 경험은 하단 [단계별 개발 기록](#단계별-개발-기록)의 8단계 및 인프라 셋업 섹션에 상세 보존
 
 ---
 
@@ -165,19 +223,21 @@ StorageService (인터페이스)
 
 ## API 문서
 
-**운영 서버 (인증 없이 바로 사용 가능)**
+**로컬 실행 후 Swagger UI (권장)**
+
+```
+http://localhost:8080/swagger-ui/index.html
+```
+
+> 소셜 로그인(Google/Kakao/Naver) → URL의 `?accessToken=` 값 복사 → Swagger 우상단 **Authorize** 클릭 후 붙여넣기
+
+**과거 배포 URL (Historical — 현재 서비스 상태 미검증)**
 
 ```
 https://vibe.chanyongyang.com
 ```
 
-> 소셜 로그인(Google/Kakao/Naver) → URL의 `?accessToken=` 값 복사 → Swagger 우상단 **Authorize** 클릭 후 붙여넣기
-
-**로컬 실행 후 Swagger UI 확인**
-
-```
-http://localhost:8080/swagger-ui/index.html
-```
+과거 AWS 배포 시점의 URL입니다. ARK 이관 진행 중이며 이 문서 시점에는 실제 응답 가능 여부를 검증하지 않았습니다.
 
 상세 API 명세: [`docs/api-spec.md`](docs/api-spec.md)
 
@@ -188,23 +248,40 @@ http://localhost:8080/swagger-ui/index.html
 ### 사전 요구사항
 
 - Java 17
-- Docker (MySQL 컨테이너 + Testcontainers 실행용)
+- Docker (**PostgreSQL 17 컨테이너** + Testcontainers 실행용)
 - OAuth2 앱 등록 (Google / Kakao / Naver Developer Console) — 6단계 이후 필요
+
+### PostgreSQL 로컬 컨테이너
+
+프로젝트는 로컬에서 다음 컨테이너를 사용합니다.
+
+```bash
+# 컨테이너 이름: gunpla_postgres, host port 5433, DB/user/password 모두 gunpla
+docker run -d \
+  --name gunpla_postgres \
+  -e POSTGRES_DB=gunpla \
+  -e POSTGRES_USER=gunpla \
+  -e POSTGRES_PASSWORD=gunpla \
+  -p 5433:5432 \
+  postgres:17
+```
+
+> 과거 사용하던 `gunpla_mysql` 컨테이너는 삭제하지 않고 함께 유지 중입니다 (이관 참고용).
 
 ### 환경변수 설정
 
 `src/main/resources/application-local.properties` 파일 생성:
 
 ```properties
-# Database
-spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
-spring.datasource.url=jdbc:mysql://localhost:3306/gunpla?characterEncoding=UTF-8&serverTimezone=Asia/Seoul
-spring.datasource.username=root
-spring.datasource.password=your_password
+# Database (PostgreSQL 17 로컬 컨테이너)
+spring.datasource.url=jdbc:postgresql://localhost:5433/gunpla
+spring.datasource.username=gunpla
+spring.datasource.password=gunpla
 
-# AWS S3 (5단계 이후 필요)
+# Object Storage (5단계 이후 필요) — 코드는 AWS SDK v2 S3 클라이언트 기반
+# ARK 이관 시 S3-compatible endpoint로 재설정 예정
 aws.region=ap-northeast-2
-aws.s3.bucket=your-s3-bucket-name
+aws.s3.bucket=your-bucket-name
 aws.credentials.access-key=YOUR_ACCESS_KEY_ID
 aws.credentials.secret-key=YOUR_SECRET_ACCESS_KEY
 
@@ -226,6 +303,8 @@ spring.security.oauth2.client.registration.naver.client-id=YOUR_NAVER_CLIENT_ID
 spring.security.oauth2.client.registration.naver.client-secret=YOUR_NAVER_CLIENT_SECRET
 ```
 
+> Flyway 기본 location은 `application.properties`에서 `classpath:db/migration/postgresql`로 설정. 로컬 프로파일에서는 `db/seed/postgresql`도 함께 로드하여 테스트 유저 시드가 적용됩니다.
+
 ### 실행
 
 ```bash
@@ -240,8 +319,10 @@ java -Xmx64m -Xms64m -classpath "gradle\wrapper\gradle-wrapper.jar" org.gradle.w
 ### 테스트
 
 ```bash
-./gradlew test   # Docker 실행 중이어야 함 (Testcontainers)
+./gradlew test   # Docker 실행 중이어야 함 (PostgreSQL Testcontainers)
 ```
+
+현재 총 52 tests가 정의되어 있으며 최신 실행에서 전부 통과했습니다 (0 failures, 0 errors, 0 skipped).
 
 ---
 
