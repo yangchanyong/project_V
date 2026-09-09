@@ -13,12 +13,13 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.annotation.Transactional;
-import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+// Why: MySQL → PostgreSQL 전환
 @SpringBootTest
 @Testcontainers
 @Transactional
@@ -26,14 +27,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 class CollectionQueryRepositoryTest {
 
     @Container
-    static MySQLContainer<?> mysql = new MySQLContainer<>("mysql:8.0");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:17");
 
     @DynamicPropertySource
     static void configure(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", mysql::getJdbcUrl);
-        registry.add("spring.datasource.username", mysql::getUsername);
-        registry.add("spring.datasource.password", mysql::getPassword);
-        registry.add("spring.flyway.locations", () -> "classpath:db/migration");
+        registry.add("spring.datasource.url", postgres::getJdbcUrl);
+        registry.add("spring.datasource.username", postgres::getUsername);
+        registry.add("spring.datasource.password", postgres::getPassword);
+        registry.add("spring.flyway.locations", () -> "classpath:db/migration/postgresql");
     }
 
     @Autowired
@@ -65,34 +66,36 @@ class CollectionQueryRepositoryTest {
         insertCollection(otherUserId, catalogHgId, "UNBUILT", false); // 다른 유저
     }
 
+    // Why: PostgreSQL은 LAST_INSERT_ID() 미지원 → INSERT ... RETURNING id로 생성 ID 획득
+    // NOW(6) → NOW() (PostgreSQL은 fractional seconds 인자 미지원)
     private Long insertUser(String email, String nickname) {
-        jdbcTemplate.update(
+        return jdbcTemplate.queryForObject(
             "INSERT INTO users (email, nickname, provider, provider_id, role, created_at, updated_at) "
-            + "VALUES (?, ?, 'google', ?, 'USER', NOW(6), NOW(6))",
+            + "VALUES (?, ?, 'google', ?, 'USER', NOW(), NOW()) RETURNING id",
+            Long.class,
             email, nickname, email
         );
-        return jdbcTemplate.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
     }
 
     private Long insertCatalog(String name, String grade) {
-        jdbcTemplate.update(
-            "INSERT INTO gunpla_catalog (name, grade, created_at, updated_at) VALUES (?, ?, NOW(6), NOW(6))",
+        return jdbcTemplate.queryForObject(
+            "INSERT INTO gunpla_catalog (name, grade, created_at, updated_at) VALUES (?, ?, NOW(), NOW()) RETURNING id",
+            Long.class,
             name, grade
         );
-        return jdbcTemplate.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
     }
 
     private void insertCollection(Long uid, Long catalogId, String buildStatus, boolean softDeleted) {
         if (softDeleted) {
             jdbcTemplate.update(
                 "INSERT INTO user_collection (user_id, catalog_id, build_status, deleted_at, created_at, updated_at) "
-                + "VALUES (?, ?, ?, NOW(6), NOW(6), NOW(6))",
+                + "VALUES (?, ?, ?, NOW(), NOW(), NOW())",
                 uid, catalogId, buildStatus
             );
         } else {
             jdbcTemplate.update(
                 "INSERT INTO user_collection (user_id, catalog_id, build_status, created_at, updated_at) "
-                + "VALUES (?, ?, ?, NOW(6), NOW(6))",
+                + "VALUES (?, ?, ?, NOW(), NOW())",
                 uid, catalogId, buildStatus
             );
         }

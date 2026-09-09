@@ -39,7 +39,8 @@ public class RefreshToken extends BaseTimeEntity {
     private String tokenHash;
 
     /** 토큰 만료 일시 */
-    @Column(name = "expires_at", nullable = false, columnDefinition = "DATETIME(6)")
+    // Why: MySQL 전용 DATETIME(6) 제거 — Hibernate 기본 timestamp 매핑 사용
+    @Column(name = "expires_at", nullable = false)
     private LocalDateTime expiresAt;
 
     /** 명시적 무효화 여부 (로그아웃·토큰 로테이션 시 true) */

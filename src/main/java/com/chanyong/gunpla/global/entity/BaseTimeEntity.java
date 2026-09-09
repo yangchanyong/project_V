@@ -20,11 +20,12 @@ import java.time.LocalDateTime;
  */
 public abstract class BaseTimeEntity {
 
+    // Why: columnDefinition의 MySQL 종속 문법(DATETIME(6)) 제거 — Hibernate가 vendor별 timestamp 타입을 자동 매핑
     @CreatedDate
-    @Column(nullable = false, updatable = false, columnDefinition = "DATETIME(6)")
+    @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     @LastModifiedDate
-    @Column(nullable = false, columnDefinition = "DATETIME(6)")
+    @Column(nullable = false)
     private LocalDateTime updatedAt;
 }

@@ -16,7 +16,8 @@ import java.time.LocalDateTime;
 public abstract class SoftDeletableEntity extends BaseTimeEntity {
 
     /** 소프트 삭제 시각. null이면 활성 상태 */
-    @Column(columnDefinition = "DATETIME(6)")
+    // Why: MySQL 전용 DATETIME(6) 제거 — Hibernate 기본 timestamp 매핑 사용
+    @Column
     private LocalDateTime deletedAt;
 
     /**
