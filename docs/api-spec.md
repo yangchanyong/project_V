@@ -425,8 +425,9 @@ POST /api/v1/collections/{id}/images/presigned-url
 - `contentType` 허용 목록: `image/jpeg`, `image/png`, `image/webp`
 - `fileSize` 최대: 10MB (10,485,760 bytes)
 - `s3Key`는 서버가 생성 (클라이언트의 경로 조작 불가)
-- Presigned URL에 `Content-Length-Range` 조건 포함 (서명에 바인딩)
+- Presigned URL에 요청받은 `fileSize`를 **정확한 값**으로 `Content-Length` 서명 바인딩 (범위(Range) 조건이 아닌 exact-value 서명 — PUT Presigned URL은 Content-Length-Range 조건 자체는 지원하지 않음)
 - Presigned URL에 `contentType` 서명 바인딩 (업로드 시 조작 불가)
+- Presigned URL에 `If-None-Match: *` 서명 바인딩 (동일 `s3Key`에 대한 덮어쓰기/재업로드 방지)
 - 검증 실패 시 `400 FILE_UPLOAD_VALIDATION_FAILED`
 
 **Response 200**
@@ -439,6 +440,18 @@ POST /api/v1/collections/{id}/images/presigned-url
   }
 }
 ```
+
+**클라이언트 PUT 업로드 시 필수 헤더**
+
+발급받은 `presignedUrl`로 실제 업로드(`PUT`)할 때 아래 헤더를 반드시 함께 전송해야 한다. 서명된 값과 실제 요청 헤더가 일치하지 않으면 스토리지가 서명 검증에 실패해 업로드가 거부된다.
+
+| 헤더 | 값 | 비고 |
+|------|-----|------|
+| `Content-Type` | 발급 요청 시 보낸 `contentType`과 동일한 값 | 브라우저 `fetch`/`XHR`에서 명시적으로 설정 필요 |
+| `Content-Length` | 실제 업로드 바이트 수 (발급 요청 시 보낸 `fileSize`와 일치해야 함) | 브라우저가 body 크기 기준으로 자동 설정 — 클라이언트 코드에서 직접 설정 불가(forbidden header) |
+| `If-None-Match` | `*` | 브라우저가 자동으로 붙이지 않으므로 클라이언트가 명시적으로 설정 필요 |
+
+> `presignedUrl`/`s3Key`/`expiresIn` 응답 필드는 변경되지 않았다. 위 헤더 요구사항은 API 계약(Request/Response shape)이 아니라 클라이언트의 업로드 요청 구현 시 반드시 지켜야 하는 규칙이다.
 
 ---
 
