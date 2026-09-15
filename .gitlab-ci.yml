@@ -1,0 +1,35 @@
+# Project V — ARK GitLab CI/CD
+#
+# GitHub(Public/Portfolio Canonical Repository)와 별개로,
+# ARK GitLab(ark/project-v, Delivery Mirror)에서 실제 배포 파이프라인을 담당한다.
+#
+# 공통 Runner/Job 정의는 ark/ci-templates에서 관리한다.
+# 이 파일은 include + 서비스 고유 변수만 정의하며, 공통 Template 자체는 수정하지 않는다.
+
+include:
+  - project: 'ark/ci-templates'
+    ref: main
+    file: '/templates/spring-gradle-postgres.yml'
+  - project: 'ark/ci-templates'
+    ref: main
+    file: '/templates/docker-image.yml'
+  - project: 'ark/ci-templates'
+    ref: main
+    file: '/templates/deploy-compose.yml'
+
+variables:
+  JAVA_VERSION: "17"
+
+  # CI 전용 ephemeral PostgreSQL. spring-gradle-postgres.yml의 postgres:17 service에서만 사용되며
+  # 운영 DB와 무관한 값이다. 파이프라인 실행마다 새로 뜨고 사라지는 컨테이너 전용 dummy credential.
+  CI_POSTGRES_DB: project_v
+  CI_POSTGRES_USER: project_v_ci
+  CI_POSTGRES_PASSWORD: project_v_ci_ephemeral
+
+  # Deploy — ARK 운영 서버 경로/컨테이너/헬스체크 대상
+  DEPLOY_PATH: /opt/ark/services/project-v
+  DEPLOY_IMAGE_ENV: ARK_PROJECT_V_IMAGE
+  DEPLOY_CONTAINER: ark-project-v
+  DEPLOY_HEALTH_URL: http://127.0.0.1:8080/actuator/health
+  DEPLOY_SERVICE_NAME: "Project V"
+  # DEPLOY_ROLLBACK_HEALTH_URL: DEPLOY_HEALTH_URL과 동일 endpoint이므로 공통 template 기본값을 그대로 사용한다.

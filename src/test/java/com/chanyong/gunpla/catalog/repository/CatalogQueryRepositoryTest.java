@@ -14,23 +14,24 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-// Why: MySQL → PostgreSQL 전환
+// Why: MySQL → PostgreSQL 전환.
+// GitLab CI(ark-docker-runner)는 Docker socket이 없어 Testcontainers를 실행할 수 없으므로,
+// 공통 template이 주입하는 SPRING_DATASOURCE_URL이 있으면 그대로 사용하고 없으면(로컬) Testcontainers를 기동한다.
 @SpringBootTest
-@Testcontainers
 @Transactional
 @ActiveProfiles("test")
 class CatalogQueryRepositoryTest {
 
-    @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:17");
-
     @DynamicPropertySource
     static void configure(DynamicPropertyRegistry registry) {
+        if (System.getenv("SPRING_DATASOURCE_URL") != null) {
+            return;
+        }
+        PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:17");
+        postgres.start();
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
