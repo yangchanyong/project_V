@@ -17,11 +17,13 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Optional;
+import java.util.OptionalLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.*;
 
@@ -87,7 +89,7 @@ class CollectionImageServiceTest {
     void generatePresignedUrl_성공() {
         PresignedUrlRequest req = new PresignedUrlRequest("photo.jpg", "image/jpeg", 1024L);
         given(collectionService.findOwnedCollection(1L, 1L)).willReturn(mock(UserCollection.class));
-        given(storageService.generatePutPresignedUrl(anyString(), anyString()))
+        given(storageService.generatePutPresignedUrl(anyString(), anyString(), anyLong()))
             .willReturn("https://s3.example.com/presigned");
 
         PresignedUrlResponse response = collectionImageService.generatePresignedUrl(1L, 1L, req);
@@ -95,6 +97,18 @@ class CollectionImageServiceTest {
         assertThat(response.presignedUrl()).isEqualTo("https://s3.example.com/presigned");
         assertThat(response.s3Key()).contains("collections/1/");
         assertThat(response.expiresIn()).isEqualTo(300);
+    }
+
+    @Test
+    void generatePresignedUrl_fileSize가_StorageService까지_그대로_전달됨() {
+        PresignedUrlRequest req = new PresignedUrlRequest("photo.jpg", "image/jpeg", 1024L);
+        given(collectionService.findOwnedCollection(1L, 1L)).willReturn(mock(UserCollection.class));
+        given(storageService.generatePutPresignedUrl(anyString(), anyString(), anyLong()))
+            .willReturn("https://s3.example.com/presigned");
+
+        collectionImageService.generatePresignedUrl(1L, 1L, req);
+
+        verify(storageService).generatePutPresignedUrl(anyString(), eq("image/jpeg"), eq(1024L));
     }
 
     // ──────────────────────────────────────────
@@ -105,11 +119,58 @@ class CollectionImageServiceTest {
     void saveImage_S3에파일없음_예외() {
         ImageSaveRequest req = new ImageSaveRequest("collections/1/uuid-photo.jpg", 0);
         given(collectionService.findOwnedCollection(1L, 1L)).willReturn(mock(UserCollection.class));
-        given(storageService.exists(req.s3Key())).willReturn(false);
+        given(storageService.findObjectSize(req.s3Key())).willReturn(OptionalLong.empty());
 
         assertThatThrownBy(() -> collectionImageService.saveImage(1L, 1L, req))
             .isInstanceOf(BusinessException.class)
             .extracting("errorCode").isEqualTo(ErrorCode.FILE_UPLOAD_VALIDATION_FAILED);
+    }
+
+    @Test
+    void saveImage_실제크기_10MB초과_예외() {
+        ImageSaveRequest req = new ImageSaveRequest("collections/1/uuid-photo.jpg", 0);
+        long overSize = 10 * 1024 * 1024L + 1;
+        given(collectionService.findOwnedCollection(1L, 1L)).willReturn(mock(UserCollection.class));
+        given(storageService.findObjectSize(req.s3Key())).willReturn(OptionalLong.of(overSize));
+
+        assertThatThrownBy(() -> collectionImageService.saveImage(1L, 1L, req))
+            .isInstanceOf(BusinessException.class)
+            .extracting("errorCode").isEqualTo(ErrorCode.FILE_UPLOAD_VALIDATION_FAILED);
+
+        verify(collectionImageRepository, never()).save(any());
+    }
+
+    @Test
+    void saveImage_실제크기_정확히10MB_성공() {
+        ImageSaveRequest req = new ImageSaveRequest("collections/1/uuid-photo.jpg", 0);
+        long exactMax = 10 * 1024 * 1024L;
+        UserCollection collection = mock(UserCollection.class);
+        CollectionImage savedImage = mock(CollectionImage.class);
+
+        given(collectionService.findOwnedCollection(1L, 1L)).willReturn(collection);
+        given(storageService.findObjectSize(req.s3Key())).willReturn(OptionalLong.of(exactMax));
+        given(collectionImageRepository.save(any())).willReturn(savedImage);
+        given(savedImage.getId()).willReturn(10L);
+
+        ImageSaveResponse response = collectionImageService.saveImage(1L, 1L, req);
+
+        assertThat(response.id()).isEqualTo(10L);
+    }
+
+    @Test
+    void saveImage_HeadObject는_saveImage당_1회만_호출된다() {
+        ImageSaveRequest req = new ImageSaveRequest("collections/1/uuid-photo.jpg", 0);
+        UserCollection collection = mock(UserCollection.class);
+        CollectionImage savedImage = mock(CollectionImage.class);
+
+        given(collectionService.findOwnedCollection(1L, 1L)).willReturn(collection);
+        given(storageService.findObjectSize(req.s3Key())).willReturn(OptionalLong.of(1024L));
+        given(collectionImageRepository.save(any())).willReturn(savedImage);
+        given(savedImage.getId()).willReturn(10L);
+
+        collectionImageService.saveImage(1L, 1L, req);
+
+        verify(storageService, times(1)).findObjectSize(req.s3Key());
     }
 
     @Test
@@ -130,7 +191,7 @@ class CollectionImageServiceTest {
         CollectionImage savedImage = mock(CollectionImage.class);
 
         given(collectionService.findOwnedCollection(1L, 1L)).willReturn(collection);
-        given(storageService.exists(req.s3Key())).willReturn(true);
+        given(storageService.findObjectSize(req.s3Key())).willReturn(OptionalLong.of(1024L));
         given(collectionImageRepository.save(any())).willReturn(savedImage);
         given(savedImage.getId()).willReturn(10L);
 

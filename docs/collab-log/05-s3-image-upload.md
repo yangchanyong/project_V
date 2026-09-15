@@ -24,11 +24,22 @@
 - **최종 채택**: 동일
 - **이유**: CLAUDE.md "외부 인프라 의존 서비스는 인터페이스 + 구현체 분리" 원칙. 단위 테스트에서 Mock 교체 가능
 
-### Content-Length-Range 처리
+### Content-Length-Range 처리 (2026-09-15 실증 후 정정)
 
-- **AI 초안**: Presigned URL에 `Content-Length-Range` 조건 서명 바인딩 제안
-- **최종 채택**: 서버 레이어 검증(`fileSize <= 10MB`)으로 대체
-- **이유**: AWS SDK v2 PUT Presigned URL은 `Content-Length-Range` 조건을 서명에 포함할 수 없음 (S3 POST Policy만 지원). `contentType`은 서명에 포함되어 S3 레벨 강제 적용, 파일 크기는 서버 사전 검증으로 보완
+- **AI 초안(5단계 당시)**: Presigned URL에 `Content-Length-Range` 조건 서명 바인딩 제안
+- **5단계 최종 채택(당시)**: 서버 레이어 사전 검증(`fileSize <= 10MB`)만으로 대체
+- **5단계 당시 이유**: AWS SDK v2 PUT Presigned URL은 `Content-Length-Range` **조건(정책 범위)** 을 서명에 포함할 수 없음 (S3 POST Policy 전용 기능). 이 판단 자체는 정확함
+
+**정정 — 실제로는 구분이 더 세밀하게 필요했음**: `Content-Length-Range` **정책 조건**과 **정확한 단일 Content-Length 값 서명**은 서로 다른 기능이다.
+
+- `Content-Length-Range`(범위 조건, 예: "0~10MB 사이")는 PUT Presigned URL에서 지원 불가 — 이 부분은 5단계 판단이 맞음
+- 그러나 `PutObjectRequest.Builder.contentLength(Long)`으로 **정확한 단일 값**을 지정하면, 이 값이 `PutObjectPresignRequest` 생성 시 SigV4 `X-Amz-SignedHeaders`에 `content-length`로 실제 포함됨을 AWS SDK v2 2.29.52 기준 JShell 실측 실험으로 확인함(2026-09-14 EXPERIMENT). 5단계 당시에는 이 exact-value 바인딩 가능성을 검토하지 않고 "Content-Length 관련 기능 전체가 불가능하다"로 결론 내렸던 것이 부정확했음
+
+**현재(보안 보강 단계) 최종 구현**:
+- `PresignedUrlRequest.fileSize`를 사전 검증(`fileSize <= 10MB`, 여전히 유지) 후, 검증된 그 값을 그대로 `PutObjectRequest.contentLength()`에 바인딩해 정확한 단일 값으로 서명(exact Content-Length signature)
+- `saveImage()` 시점에 `HeadObject`로 실측 `contentLength`를 재조회해 10MB 상한을 한 번 더 검증(신고값이 아닌 실측값 기준)
+- `PutObjectRequest.ifNoneMatch("*")`를 함께 서명해 동일 `s3Key`에 대한 재업로드(덮어쓰기)를 방지
+- 세 가지 모두 AWS SDK v2 2.29.52 API로 SDK 레벨에서는 서명 가능함이 실측 확인됨. 다만 **실제 운영 스토리지(ARK MinIO AIStor)가 이 서명된 헤더들을 실제로 강제 검증하는지는 별도의 서버 대상 통합 테스트가 필요**하며 이번 구현 단계에서는 미확인 상태로 남아 있음
 
 ### LocalStorageService 구현
 
