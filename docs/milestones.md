@@ -12,6 +12,7 @@
 | 6단계 | OAuth2 + JWT + Refresh Token | ✅ 완료 | [06-oauth2-jwt.md](collab-log/06-oauth2-jwt.md) |
 | 7단계 | Rate Limiting + 운영 편의 | ✅ 완료 | [07-rate-limiting.md](collab-log/07-rate-limiting.md) |
 | 8단계 | AWS EC2 배포 + CI/CD | ✅ 완료 | [09-aws-ec2-deploy.md](collab-log/09-aws-ec2-deploy.md) |
+| 9단계 | PostgreSQL 전환 + AWS → ARK Migration | ✅ 완료 (2026-09-20) | [10-ark-migration.md](collab-log/10-ark-migration.md) |
 
 ---
 
@@ -26,6 +27,7 @@
 6단계: OAuth2 + 실제 JWT + Refresh Token   ← 인증을 뒤로 이동
 7단계: Rate Limiting + 운영 편의 기능
 8단계: AWS EC2 배포 + 운영 게이트 강화    ← CD + 배포 인프라
+9단계: PostgreSQL 전환 + AWS → ARK Migration   ← 자체 환경(ARK)으로 이관, 운영 E2E까지
 ```
 
 > **순서 변경 이유**: OAuth2는 외부 프로바이더 연동으로 변수가 많아 일정이 늘어지기 쉽습니다. 핵심 비즈니스 API를 먼저 완성하면 Swagger·테스트·데모 거리가 빨리 생겨서 포트폴리오로서 보여줄 수 있는 것이 일찍 확보됩니다. 1단계에서 테스트용 인증(하드코딩 유저)으로 우회하고, 6단계에서 실제 인증으로 교체하는 전략.
@@ -136,6 +138,7 @@
 - [x] **Presigned URL 보안 통제**
   - `contentType` 허용 목록: `image/jpeg`, `image/png`, `image/webp`
   - `fileSize` 검증: 최대 10MB (서버 레이어 검증으로 대체 — SDK v2 PUT은 Content-Length-Range 서명 미지원)
+    - *(9단계 후속 보강: Content-Length-Range 범위 조건은 여전히 불가하나, 정확한 단일 Content-Length 서명 + `If-None-Match: *` + HeadObject 실측 size 재검증으로 보강하고 ARK AIStor 운영 E2E까지 확인 — [05-s3-image-upload.md](collab-log/05-s3-image-upload.md))*
   - `s3Key`는 서버에서 UUID로 생성 (경로 조작 방지)
   - 서명 만료 5분
 - [x] `POST /api/v1/collections/{id}/images/presigned-url` — URL 발급
@@ -230,3 +233,53 @@
   - DB 엔드포인트, CORS origin, OAuth2 redirect URI 환경별 구분
 - [ ] 운영 게이트 강화: 의존성 취약점 스캔 (`trivy` 또는 `dependency-check`)
 - [ ] 전체 E2E 배포 검증
+
+---
+
+## 9단계: PostgreSQL 전환 + AWS → ARK Migration
+
+**브랜치**: `migration/postgresql-ark`, `feat/ark-object-storage`, `feat/ark-gitlab-cicd` 등 → main (GitHub Canonical)
+
+**완료일**: 2026-09-20 (운영 E2E 완료)
+
+### 인프라 구성 (결정 사항)
+- 소스: GitHub `yangchanyong/project_V`가 Canonical, ARK GitLab `ark/project-v`는 CI/CD · Registry · Deploy용 Delivery Copy
+- 앱: Docker 컨테이너 `ark-project-v` (ARK 내부 네트워크 `ark-internal`, host port 직접 publish 없음)
+- Proxy/TLS: Cloudflare → Nginx, Let's Encrypt + Nginx TLS (`vibe.chanyongyang.com`)
+- DB: PostgreSQL 17 (ARK, Project V 전용 DB/Role)
+- Storage: MinIO AIStor (S3-Compatible), Public Presign endpoint `storage.chanyongyang.com`, bucket `project-v`
+- 기존 AWS 리소스/데이터는 복구하지 않고 GitHub Source 기준으로 재배포 (옮길 운영 데이터 없음). 과거 AWS 운영 경험(8단계)은 Historical Experience로 보존
+
+### 작업 목록
+
+#### Database
+- [x] PostgreSQL 17 전환 — Entity `columnDefinition` MySQL 종속 제거, 테스트/시드 SQL PostgreSQL 문법 전환
+- [x] vendor-specific Flyway migration 분리 (`db/migration/mysql` 보존 / `db/migration/postgresql` 신규, seed 동일 패턴)
+- [x] Testcontainers `postgres:17` 전환 (전환 시점 52 tests pass)
+- [x] ARK PostgreSQL 17 연결 (Project V 전용 DB/Role)
+
+#### Object Storage
+- [x] S3-Compatible Object Storage(ARK MinIO AIStor) 전환 — AWS SDK v2 + `StorageService` 구조 유지
+- [x] Internal endpoint / Public Presign endpoint 분리, path-style access, `S3_*` 환경변수 정리
+- [x] 서비스 전용 credential (Root/Admin credential 미사용), Bucket CORS Origin 제한
+- [x] Presigned PUT 보안 보강 — exact Content-Length 서명, `If-None-Match: *`, HeadObject 실측 size 재검증
+- [x] Public hostname `storage.chanyongyang.com` 확정 (초기 후보 `storage.vibe.chanyongyang.com` 폐기)
+
+#### CI/CD / Delivery
+- [x] GitHub Canonical / ARK GitLab Delivery Copy 역할 분리
+- [x] `.gitlab-ci.yml` — `ark/ci-templates` include (test / image / deploy)
+- [x] CI test DB: Docker socket 없이 `postgres:17` service 사용 (`SPRING_DATASOURCE_*`), Local은 Testcontainers 유지
+- [x] Docker image 결정성 — plain jar 비활성화로 `build/libs`에 실행 가능한 bootJar 하나만 생성
+- [x] GitLab Container Registry (commit SHA image)
+- [x] `/actuator/health`(Actuator, health만 노출) 기반 배포 후 Health Check
+- [x] Legacy GitHub CD(AWS OIDC + EC2 SSH) 제거, GitHub Actions는 Public CI로 유지
+
+#### Runtime / Public
+- [x] ARK 운영 배포 (`ark-project-v`, `ark-internal`, host port 미공개)
+- [x] Public HTTPS — Cloudflare → Nginx → ARK 내부 네트워크, Let's Encrypt + Nginx TLS
+
+#### 운영 검증 / 정리
+- [x] OAuth 운영 E2E — Google / Kakao / Naver 로그인 성공, redirect_uri 운영 HTTPS 기준 정상
+- [x] Presigned / Storage 운영 E2E — PUT 200 · 불일치 차단 · 재업로드 412 · HeadObject/metadata 201 · GET 200 · CORS · 10MiB+1 413
+- [x] Legacy 정리 — `storage.vibe.chanyongyang.com`(Nginx/Certificate/DNS) 삭제, 구 AWS DNS record 삭제
+- [x] 협업 로그 작성 (`10-ark-migration.md`)

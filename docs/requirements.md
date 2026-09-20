@@ -45,9 +45,9 @@
     - Content-Type 허용 목록: `image/jpeg`, `image/png`, `image/webp`
     - 파일 크기 제한: 10MB
     - `s3Key`는 서버가 UUID 포함하여 생성 (클라이언트 경로 조작 불가)
-    - Presigned URL에 `Content-Length-Range`, `contentType` 서명 바인딩
+    - Presigned URL에 `contentType`, 정확한 `Content-Length`(서버가 검증한 `fileSize`), `If-None-Match: *` 서명 바인딩 (PUT Presigned URL은 `Content-Length-Range` 범위 조건을 서명할 수 없음)
     - 서명 만료 5분
-- 업로드 완료 후 이미지 메타데이터 저장 (서버가 `HeadObject`로 S3 존재 검증)
+- 업로드 완료 후 이미지 메타데이터 저장 (서버가 `HeadObject` 1회로 존재 여부와 실측 크기(최대 10MB)를 검증)
 - 이미지 삭제 (S3 파일 + DB 레코드 동시 삭제)
 
 ### 위시리스트 (Wishlist)
@@ -74,7 +74,8 @@
 
 ### 보안
 - 모든 API 엔드포인트 JWT 인증 필수 (공개 엔드포인트 제외)
-- AWS 크리덴셜은 OIDC 기반 IAM Role 사용 (장기 키 미사용)
+- Object Storage credential은 서비스 전용 IAM credential을 사용하고(Root/Admin credential 미사용) 환경변수로만 주입
+  - Historical (AWS, 8단계): OIDC 기반 IAM Role 사용 (장기 키 미사용)
 - Refresh Token은 DB에 SHA-256 해시로 저장
 - Presigned URL은 조건부 서명으로 업로드 경로/타입/크기 제한
 - `.env`, `application-prod.yml` 절대 커밋 금지
@@ -102,12 +103,13 @@
 - Service 레이어: Mockito 단위 테스트
   - 상태 머신 전이 규칙 검증 포함
   - 트랜잭션 롤백 시나리오 포함 (위시 → 컬렉션 이동)
-- Repository 레이어: Testcontainers(MySQL) 통합 테스트
+- Repository 레이어: Testcontainers(PostgreSQL) 통합 테스트 (GitLab CI에서는 Docker socket 없이 `postgres:17` service 사용)
 - 핵심 API 흐름: `@SpringBootTest` 슬라이스 테스트
 - 외부 인프라 의존 서비스(`StorageService`)는 인터페이스 Mock으로 테스트
 
 ### 운영
 - Swagger UI (`/swagger-ui.html`) 로 API 문서 자동화
-- GitHub Actions CI: PR 시 자동 테스트
-- GitHub Actions CD: develop 머지 → dev 자동 배포, main 머지 → prod 수동 승인 배포
+- GitHub Actions CI: PR 시 자동 테스트 (Public CI)
+- ARK GitLab CI/CD: GitHub `main`(Canonical)의 delivery copy(`ark/project-v`)에서 테스트 → 빌드 → commit SHA 이미지(Registry) → ARK 배포 → `/actuator/health` 검증
+  - Historical (AWS, 8단계): GitHub Actions CD — develop 머지 → dev 자동 배포, main 머지 → prod 수동 승인 배포
 - 프로파일별 `application-{env}.yml` 분리 (local, dev, prod)

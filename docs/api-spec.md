@@ -294,7 +294,7 @@ GET /api/v1/collections?buildStatus=COMPLETED&grade=MG&page=0&size=20
       "purchaseDate": "2024-12-01",
       "purchasePlace": "요도바시카메라",
       "images": [
-        { "id": 1, "url": "https://s3.amazonaws.com/...", "displayOrder": 0 }
+        { "id": 1, "url": "https://storage.chanyongyang.com/bucket/...", "displayOrder": 0 }
       ],
       "createdAt": "2024-12-01T10:00:00"
     }
@@ -434,12 +434,14 @@ POST /api/v1/collections/{id}/images/presigned-url
 ```json
 {
   "data": {
-    "presignedUrl": "https://s3.amazonaws.com/bucket/...?X-Amz-Signature=...",
+    "presignedUrl": "https://storage.chanyongyang.com/bucket/...?X-Amz-Signature=...",
     "s3Key": "collections/1/550e8400-e29b-41d4-a716-446655440000-front.jpg",
     "expiresIn": 300
   }
 }
 ```
+
+> `presignedUrl`의 host는 Public Presign endpoint(`storage.chanyongyang.com`)이며 path-style(`/{bucket}/{s3Key}`)이다. 서버 내부 통신용 Internal endpoint는 응답에 노출되지 않는다.
 
 **클라이언트 PUT 업로드 시 필수 헤더**
 

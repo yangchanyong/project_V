@@ -2,6 +2,30 @@
 
 ## 시스템 구성도
 
+### Current — ARK 운영 (2026-09-20~)
+
+```
+클라이언트 (Swagger UI / 외부 앱)
+        │
+        ▼
+[Cloudflare]  (vibe.chanyongyang.com)
+        │
+        ▼
+[ARK Nginx]  ← Let's Encrypt + TLS
+        │  (ark-internal 네트워크, host port 직접 publish 없음)
+        ▼
+[ark-project-v]  Spring Boot (Docker)
+        ├── [ARK PostgreSQL 17]   ← JPA + QueryDSL + Flyway (Project V 전용 DB/Role)
+        └── [ARK AIStor]          ← S3-Compatible Object Storage
+                                     ├─ Internal endpoint (서버 → 스토리지)
+                                     └─ Public Presign endpoint: storage.chanyongyang.com
+                                        (클라이언트 직접 업로드/다운로드)
+```
+
+소스/배포: GitHub `main`(Canonical) → ARK GitLab `ark/project-v`(Delivery Copy) → GitLab Runner → Registry(commit SHA image) → ARK Deploy → `/actuator/health` 검증
+
+### Historical — AWS 운영 (8단계)
+
 ```
 클라이언트 (Swagger UI / 외부 앱)
         │
@@ -29,7 +53,7 @@ Service (비즈니스 로직, @Transactional)
 Repository (JPA + QueryDSL)
     │
     ▼
-DB (MySQL / Aurora)
+DB (PostgreSQL 17 / Historical: MySQL, Aurora MySQL)
 ```
 
 ### 레이어 규칙
@@ -140,16 +164,16 @@ com.chanyong.gunpla
 | Language | Java 17 |
 | Framework | Spring Boot 3.5.0 |
 | ORM | Spring Data JPA + QueryDSL 5.1.0 (jakarta) |
-| DB | MySQL 8.0 (로컬), AWS Aurora MySQL (운영) |
-| Migration | Flyway |
+| DB | PostgreSQL 17 (ARK 운영 / 로컬 Docker) — Historical: MySQL 8.0, AWS Aurora MySQL |
+| Migration | Flyway (vendor-specific: `db/migration/postgresql` 현재 / `db/migration/mysql` Historical Reference) |
 | Auth | Spring Security + OAuth2 Client + JWT (jjwt 0.12.6) |
-| Storage | AWS S3 (SDK v2 2.29.52) |
+| Storage | AWS SDK v2 (2.29.52) 기반 S3-Compatible — ARK MinIO AIStor (Historical: AWS S3) |
 | Rate Limit | Bucket4j 8.x + Caffeine (로컬) / Redis (운영 확장 시) |
 | API Docs | springdoc-openapi 2.8.8 (Swagger UI) |
 | Test | JUnit 5 + Mockito + Testcontainers |
 | Build | Gradle 8.14.4 |
-| Deploy | AWS EC2 (t3.micro) + Docker + nginx (host) + Cloudflare |
-| CI/CD | GitHub Actions |
+| Deploy | ARK — Docker(`docker compose`) + Nginx + Cloudflare, Let's Encrypt TLS (Historical: AWS EC2 t3.micro + Docker + nginx (host) + Cloudflare) |
+| CI/CD | GitLab CI/CD + Runner + Registry (ARK). GitHub `main`이 Canonical Source, GitHub Actions는 Public CI (Historical: GitHub Actions OIDC CD) |
 
 ---
 
@@ -179,15 +203,18 @@ com.chanyong.gunpla
 - 계정 통합 기능은 Phase 2 (UX 복잡도 및 보안 검토 필요)
 
 ### 4. S3 Presigned URL 방식
-- 서버가 S3 업로드 프록시 역할을 하지 않음 (서버 부하 최소화)
-- 클라이언트가 Presigned URL로 S3에 직접 업로드
+- 서버가 스토리지 업로드 프록시 역할을 하지 않음 (서버 부하 최소화)
+- 클라이언트가 Presigned URL로 Object Storage(현재 ARK AIStor, Historical: AWS S3)에 직접 업로드
 - **조건부 서명으로 보안 통제**:
   - `contentType` 허용 목록 제한 (`image/jpeg`, `image/png`, `image/webp`)
-  - `Content-Length-Range` 조건으로 최대 10MB 제한
+  - 최대 10MiB: 서버가 `fileSize`를 사전 검증하고, 검증된 값을 exact `Content-Length`로 서명 (PUT Presigned URL은 `Content-Length-Range` 범위 조건을 서명할 수 없음)
+  - `If-None-Match: *` 서명으로 동일 Key overwrite 방지
   - `s3Key`는 서버가 UUID 포함하여 생성 (경로 조작 불가)
   - 서명 만료 5분
 - 업로드 완료 후 `/images` API로 메타데이터 저장
-- 서버는 저장 전 `HeadObject`로 S3 실제 존재 여부 검증
+- 서버는 저장 시 `HeadObject` 1회로 존재 여부와 실측 size(최대 10MiB)를 재검증 (신고값이 아닌 실측값 기준)
+- Internal endpoint(서버 → 스토리지)와 Public Presign endpoint(클라이언트에게 내려주는 URL)를 분리해 Presigned URL에 내부 hostname이 노출되지 않게 함
+- 실제 ARK AIStor 운영 환경에서 exact Content-Length, overwrite 방어(412), HeadObject, GET, CORS, 10MiB+1 byte 413을 E2E로 검증 (2026-09-20)
 
 ### 5. `StorageService` 인터페이스 분리
 - 서비스 레이어는 기본적으로 구현체 직접 사용이지만, **외부 인프라 의존 서비스는 예외**
@@ -227,12 +254,13 @@ com.chanyong.gunpla
 - 엔티티 직접 수정으로 DDL 변경 금지
 - ENUM 대신 VARCHAR 사용 (Hibernate 6 타입 검증 호환)
 
-### 11. 패키징 WAR → JAR + Docker on EC2
+### 11. 패키징 WAR → JAR + Docker 컨테이너 배포
 - Embedded Tomcat 포함 JAR — 외부 Tomcat 불필요
-- 운영 배포: EC2(t3.micro)에 Docker 컨테이너로 실행, nginx는 **호스트에 직접 설치**해 리버스 프록시 역할 (컨테이너 중첩 오버헤드 회피)
-- `Dockerfile`: `FROM eclipse-temurin:17-jre` + layered jar로 빌드 캐시 최적화
-- t3.micro 메모리(1GB) 제약 대응
-  - JVM 힙 명시: `-Xms256m -Xmx512m`
-  - 컨테이너 메모리 limit과 일치시켜 OOM 예측 가능
-  - 인스턴스에 swap 1~2GB 추가 (기본 미할당)
-- ECS Fargate 대신 EC2 + Docker를 택한 이유: 단일 인스턴스 포트폴리오 규모에서 Fargate 비용/학습 곡선보다 EC2 직접 운영 + 컨테이너 경험이 실익 큼. 8단계에서 CD 파이프라인 + 이미지 취약점 스캔을 함께 갖춤
+- `Dockerfile`: `eclipse-temurin:17-jre-jammy` 런타임에 빌드된 bootJar를 복사하고 JVM 힙은 `-Xms256m -Xmx512m`으로 명시. plain jar 생성을 꺼서(`tasks.named('jar') { enabled = false }`) `build/libs`에 실행 가능한 JAR가 항상 하나만 존재
+- **Current (ARK, 2026-09-20~)**: `docker compose`로 `ark-project-v` 컨테이너를 ARK 내부 네트워크(`ark-internal`)에서만 실행하고 host port는 직접 publish하지 않음. Cloudflare → Nginx → 컨테이너. 이미지는 GitLab Registry의 commit SHA 태그로 배포하고 배포 후 `/actuator/health`로 검증
+- **Historical (AWS, 8단계)**: EC2(t3.micro)에 Docker 컨테이너로 실행, nginx는 **호스트에 직접 설치**해 리버스 프록시 역할 (컨테이너 중첩 오버헤드 회피)
+  - t3.micro 메모리(1GB) 제약 대응
+    - JVM 힙 명시: `-Xms256m -Xmx512m`
+    - 컨테이너 메모리 limit과 일치시켜 OOM 예측 가능
+    - 인스턴스에 swap 1~2GB 추가 (기본 미할당)
+  - ECS Fargate 대신 EC2 + Docker를 택한 이유: 단일 인스턴스 포트폴리오 규모에서 Fargate 비용/학습 곡선보다 EC2 직접 운영 + 컨테이너 경험이 실익 큼. 8단계에서 CD 파이프라인 + 이미지 취약점 스캔을 함께 갖춤

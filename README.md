@@ -4,27 +4,31 @@
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.5.0-brightgreen)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-336791)
 ![Docker](https://img.shields.io/badge/Docker-container-blue)
-![Migration](https://img.shields.io/badge/Migration-AWS%E2%86%92ARK-yellow)
+![Migration](https://img.shields.io/badge/Migration-AWS%E2%86%92ARK_Done-brightgreen)
 
-> **현재 상태**: AWS(Aurora MySQL) 기반 8단계 배포 이력 이후, **ARK 이관을 위한 PostgreSQL 코드 전환 완료 (2026-09-09)**.
-> 실제 ARK 배포·오브젝트 스토리지 연결·CI/CD 재배선은 **진행 중**이며, 아래 [ARK 이전 현황](#ark-이전-현황) 섹션에 항상성/진행상황을 정리합니다.
+> **현재 상태**: 8단계에서 AWS에 실제로 운영했던 경험을 보존한 채, **2026-09-20 AWS → ARK Migration을 완료**했습니다. 현재는 자체 ARK 환경에서 PostgreSQL 17 + AIStor(S3-Compatible Object Storage)로 운영하고, GitLab CI/CD로 배포합니다.
+> 전체 회고는 [`10-ark-migration.md`](docs/collab-log/10-ark-migration.md), AWS 운영 경험은 [`09-aws-ec2-deploy.md`](docs/collab-log/09-aws-ec2-deploy.md)를 참고하세요.
+
+**🔗 Live:** [https://vibe.chanyongyang.com](https://vibe.chanyongyang.com)
 
 ---
 
-**완료된 작업 (현시점 사실)**
+**현재 운영 상태 (Current — ARK, 2026-09-20)**
 
 - Java 17 + Spring Boot 3.5 기반 건프라 인벤토리 REST API
-- OAuth2(Google/Kakao/Naver) + JWT + Refresh Token Rotation 구현
-- Presigned URL 기반 이미지 업로드, Bucket4j Rate Limiting
-- QueryDSL 동적 검색, **PostgreSQL 17 + vendor-specific Flyway migration**
-- **PostgreSQL Testcontainers 통합 테스트** — `./gradlew test` **52 tests all pass**
+- Public HTTPS: Cloudflare → Nginx → ARK 내부 네트워크 → 애플리케이션 (Let's Encrypt + Nginx TLS)
+- **PostgreSQL 17** + vendor-specific Flyway migration
+- **S3-Compatible Object Storage** — AWS SDK v2 + `StorageService` 구조를 유지한 채 ARK MinIO AIStor 사용
+- **CI/CD**: GitHub(Canonical) → ARK GitLab(Delivery Copy) → Runner → Registry(commit SHA image) → Deploy → Health Check
+- OAuth2(Google/Kakao/Naver) + JWT + Refresh Token Rotation — 운영 로그인 E2E 완료
+- Presigned PUT 보안 보강(exact Content-Length, `If-None-Match: *`, HeadObject 실측 검증) — ARK AIStor 운영 E2E 완료
 - Claude Code 기반 AI 협업 프로세스를 CLAUDE.md와 collab-log로 통제
 
-**과거 운영 이력 (Historical Experience — 상세는 하단 8단계 참조)**
+**과거 운영 이력 (Historical Experience — 보존)**
 
-- AWS EC2 (t3.micro) + Docker + nginx + Cloudflare + **Aurora Serverless v2 (MySQL)** + AWS S3 조합으로 실제 배포·운영한 이력
-- GitHub Actions OIDC 인증 기반 CD 파이프라인 구축 이력
-- 도메인 `vibe.chanyongyang.com`은 과거 배포 URL. 현재 실제 서비스 중인지는 별도 검증하지 않았음
+- AWS EC2 (t3.micro) + Docker + nginx + Cloudflare + **Aurora Serverless v2 (MySQL)** + AWS S3 조합으로 실제 배포·운영
+- GitHub Actions OIDC 인증 기반 CD 파이프라인 구축
+- 상세는 하단 8단계 기록과 [`09-aws-ec2-deploy.md`](docs/collab-log/09-aws-ec2-deploy.md) 참고
 
 ---
 
@@ -65,44 +69,76 @@ AI가 일관되고 안전하게 동작하도록 **환경을 설계하는 것**.
 
 ## 기술 스택
 
-현재 코드베이스가 사용하는 스택(굵게)과, 과거 AWS 운영 시점의 스택(괄호)을 함께 표기합니다.
+현재 운영 스택(굵게)과, 과거 AWS 운영 시점의 스택(Historical)을 함께 표기합니다.
 
 | 분류 | 기술 |
 |------|------|
 | Language | Java 17 |
 | Framework | Spring Boot 3.5.0 |
 | ORM | Spring Data JPA + QueryDSL 5.1.0 (jakarta) |
-| Database | **PostgreSQL 17 (로컬 컨테이너 `gunpla_postgres`, host 5433)**<br>*(Historical: MySQL 8.0 / AWS Aurora Serverless v2 MySQL)* |
-| Migration | Flyway (`flyway-database-postgresql`) — vendor-specific 경로 분리 (`db/migration/mysql`, `db/migration/postgresql`) |
+| Database | **PostgreSQL 17 (ARK 운영 / 로컬 컨테이너 `gunpla_postgres`, host 5433)**<br>*(Historical: MySQL 8.0 / AWS Aurora Serverless v2 MySQL)* |
+| Migration | Flyway (`flyway-database-postgresql`) — vendor-specific 경로 분리 (`db/migration/mysql`은 Historical Reference로 보존, `db/migration/postgresql`이 현재 사용) |
 | Auth | Spring Security + OAuth2 (Google, Kakao, Naver) + JWT (jjwt 0.12.6) |
-| Storage | 코드는 AWS SDK v2 S3 클라이언트 사용 (Presigned URL). **ARK 이관 시 S3-compatible Object Storage로 재연결 예정** *(Historical: AWS S3 `gunpla-dev-images` 버킷 운영 이력)* |
+| Storage | **AWS SDK v2 기반 S3-Compatible Object Storage — ARK MinIO AIStor** (Presigned URL, Internal/Public presign endpoint 분리)<br>*(Historical: AWS S3 `gunpla-dev-images` 버킷 운영)* |
 | Rate Limit | Bucket4j + Caffeine (로컬) / Redis 전환 가능 (운영 확장 시) |
 | API Docs | Swagger UI (springdoc-openapi) |
-| Test | JUnit 5 + Mockito + **Testcontainers (`postgres:17`)** |
+| Test | JUnit 5 + Mockito + Testcontainers (`postgres:17`, GitLab CI에서는 `postgres:17` service 사용) |
 | Build | Gradle |
-| Deploy | **미확정 — ARK 이관 대상 (In Progress)**<br>*(Historical: AWS EC2 t3.micro + Docker + nginx (host) + Cloudflare)* |
-| CI/CD | **ARK 대상 파이프라인 재배선 예정 (Planned)**<br>*(Historical: GitHub Actions OIDC 인증 기반 CD로 EC2에 배포)* |
+| Deploy | **ARK — Docker 컨테이너(`docker compose`), Nginx reverse proxy, Cloudflare, Let's Encrypt TLS**<br>*(Historical: AWS EC2 t3.micro + Docker + nginx (host) + Cloudflare)* |
+| CI/CD | **GitLab CI/CD + Runner + Container Registry (ARK)** — GitHub `main`이 Canonical Source, GitHub Actions는 Public CI<br>*(Historical: GitHub Actions OIDC 기반 CD로 EC2에 배포)* |
 
 ---
 
 ## 시스템 아키텍처
 
-### 현재 (로컬 개발 · ARK 이관 진행 중)
+### Current — ARK 운영 (2026-09-20)
 
 ```
 클라이언트 (Swagger UI / 외부 앱)
         │
         ▼
-Spring Boot 3.5 (Java 17)
-    ├── JPA + QueryDSL + Flyway  →  PostgreSQL 17 (로컬 컨테이너 gunpla_postgres:5433)
-    └── StorageService (S3 SDK v2, Presigned URL) →  Object Storage (ARK 대상 재연결 대기)
-
-ARK 실제 배포 대상(nginx/리버스 프록시/도메인/CI-CD 재배선)은 확정 전 상태.
+[Cloudflare]
+        │
+        ▼
+vibe.chanyongyang.com
+        │
+        ▼
+[ARK Nginx]  ← Let's Encrypt + TLS
+        │  (ark-internal 네트워크, host port 직접 publish 없음)
+        ▼
+[ark-project-v]  (Spring Boot 3.5 / Java 17)
+        ├── JPA + QueryDSL + Flyway  →  PostgreSQL 17 (ARK, Project V 전용 DB/Role)
+        └── S3 SDK v2  →  ARK AIStor (S3-Compatible Object Storage)
+                            ├─ 서버 내부 통신(HeadObject/Delete): Internal endpoint
+                            └─ 클라이언트 Presigned URL: storage.chanyongyang.com (Public Presign endpoint)
 ```
+
+**CI/CD (ARK)**
+
+```
+GitHub main (Canonical Source of Truth)
+        │
+        ▼
+GitLab ark/project-v (Delivery Copy)
+        │
+        ▼
+GitLab Runner (test / build)
+        │
+        ▼
+GitLab Registry (commit SHA image)
+        │
+        ▼
+ARK Deploy (docker compose)
+        │
+        ▼
+Health Check (/actuator/health)
+```
+
+GitHub가 Canonical Source이고, ARK GitLab은 CI/CD · Registry · Deploy를 위한 delivery copy입니다. GitHub Actions는 Public CI(`ci.yml`)로만 남기고, 과거 AWS/EC2 배포용 CD workflow는 제거했습니다.
 
 ### Previous Production Architecture (AWS — Historical)
 
-과거 실제 배포하여 운영한 이력. 현재는 이관 진행 중이며 URL의 현재 상태는 별도 검증하지 않음.
+8단계에서 AWS에 실제로 배포하여 운영했던 구조입니다. 2026-09-20 ARK Migration 이후 현재 운영 경로가 아니며, 운영 경험으로 보존합니다.
 
 ```
 클라이언트 (Swagger UI / 외부 앱)
@@ -117,7 +153,7 @@ ARK 실제 배포 대상(nginx/리버스 프록시/도메인/CI-CD 재배선)은
         └── [AWS S3]                              ← 컬렉션 이미지 (Presigned URL)
 ```
 
-**레이어 구조 (DB만 벤더 교체, 나머지는 동일)**
+**레이어 구조 (AWS/ARK 공통 — DB와 Storage endpoint만 교체)**
 ```
 Controller (HTTP 요청/응답, DTO)
     │
@@ -128,11 +164,11 @@ Service (비즈니스 로직, @Transactional)
 Repository (JPA + QueryDSL)
     │
     ▼
-DB (현재: PostgreSQL / Historical: MySQL, Aurora MySQL)
+DB (현재: PostgreSQL 17 / Historical: MySQL, Aurora MySQL)
 
 StorageService (인터페이스)
-    ├── S3StorageService   ← AWS S3 운영 이력 / ARK 이관 시 S3-compatible 재타겟
-    └── LocalStorageService ← 로컬 개발
+    └── S3StorageService   ← 현재: ARK AIStor (S3-Compatible) / Historical: AWS S3
+                             (같은 AWS SDK v2 코드, endpoint/credential만 교체)
 ```
 
 ---
@@ -150,7 +186,7 @@ StorageService (인터페이스)
 | 6단계 | OAuth2 + 실제 JWT + Refresh Token (Google, Kakao, Naver) + 토큰 로테이션 | ✅ | [06-oauth2-jwt](docs/collab-log/06-oauth2-jwt.md) |
 | 7단계 | Rate Limiting + 운영 편의 기능 (Soft Delete 배치, 만료 토큰 정리) | ✅ | [07-rate-limiting](docs/collab-log/07-rate-limiting.md) |
 | 8단계 | AWS EC2 배포 + Cloudflare 도메인 연결 + 운영 게이트 강화 (EC2 + nginx, Aurora, CD 파이프라인, 보안 스캔) | ✅ | [09-aws-ec2-deploy](docs/collab-log/09-aws-ec2-deploy.md) |
-| 9단계 | **PostgreSQL 코드 전환 (Aurora MySQL → PostgreSQL 17)** — vendor-specific Flyway migration 분리, Testcontainers 전환, 52 tests pass. **ARK 실제 배포·오브젝트 스토리지·CI/CD 이관은 In Progress** | 🟡 부분 완료 | (작성 예정) |
+| 9단계 | **PostgreSQL 전환 + AWS → ARK Migration** — PostgreSQL 17 · S3-Compatible Object Storage(AIStor) · Presigned 보안 보강 · GitLab CI/CD · ARK 운영 배포 · Public HTTPS · OAuth/Storage 운영 E2E (2026-09-20 완료) | ✅ | [10-ark-migration](docs/collab-log/10-ark-migration.md) |
 
 > 단계 완료 PR에는 협업 로그 링크와 AI 활용 비중(대략 %) 명시  
 > 단계 순서 결정 이유: 핵심 비즈니스 API(카탈로그·컬렉션)를 먼저 완성해 빠르게 동작하는 결과물 확보 후, OAuth2·운영 기능을 후순위 배치. 1단계는 테스트용 인증으로 우회하고 6단계에서 실제 OAuth2로 교체.
@@ -159,9 +195,9 @@ StorageService (인터페이스)
 
 ## ARK 이전 현황
 
-Aurora MySQL 전제를 폐기하고 최종 배포 대상을 **ARK**로 확정한 뒤 진행 중인 이관 상태를 항목별로 명시합니다.
+Aurora MySQL/AWS 전제를 폐기하고 최종 배포 대상을 **ARK**로 확정한 뒤, **2026-09-20에 Migration을 완료**했습니다. 기존 AWS 리소스와 데이터는 복구하지 않고 GitHub Source를 기준으로 ARK에 재배포했습니다(옮길 운영 데이터가 없었기 때문입니다).
 
-### ✅ 완료 (2026-09-09 기준)
+### ✅ 1) PostgreSQL 전환 (2026-09-09)
 
 - **PostgreSQL 코드 전환** — `AUTO_INCREMENT` → `GENERATED BY DEFAULT AS IDENTITY`, `DATETIME(6)` → `TIMESTAMP(6)`, `TINYINT(1)` → `BOOLEAN` 등 스키마 변환
 - **Entity `columnDefinition` MySQL 종속 제거** — `BaseTimeEntity`, `SoftDeletableEntity`, `RefreshToken`의 `DATETIME(6)` 지정 제거 → Hibernate 기본 timestamp 매핑 사용
@@ -170,14 +206,35 @@ Aurora MySQL 전제를 폐기하고 최종 배포 대상을 **ARK**로 확정한
   - `db/migration/postgresql/` — PostgreSQL 문법 신규 파일 (V1/V2/V4)
   - `db/seed/mysql/`, `db/seed/postgresql/` — 시드도 동일 패턴
 - **PostgreSQL Testcontainers 전환** — `MySQLContainer("mysql:8.0")` → `PostgreSQLContainer("postgres:17")`, 테스트용 JDBC 문법(`NOW(6)` → `NOW()`, `LAST_INSERT_ID()` → `INSERT ... RETURNING id`) 정리
-- **전체 테스트 통과** — `./gradlew test` → **52 tests, 0 failures, 0 errors, 0 skipped**
+- **전체 테스트 통과** — 전환 시점 `./gradlew test` → **52 tests, 0 failures, 0 errors, 0 skipped** (이후 Presigned 보강 등으로 테스트가 늘어 현재 66 tests)
 - **`application-prod.properties` 코멘트/설정 정리** — `${DB_URL}` 환경변수 외부화 유지, Flyway location을 `db/migration/postgresql`로 지정
 
-### 🟡 In Progress / Planned
+### ✅ 2) ARK 운영 전환 (2026-09-20 완료)
 
-- **ARK 실제 배포** — ARK 인프라 프로비저닝, 리버스 프록시/도메인 설정 미확정. `application-prod.properties`의 `DB_URL`/자격증명은 env 위임 상태로만 대기
-- **S3-compatible Object Storage 이전** — 코드는 AWS SDK v2 S3 클라이언트를 그대로 사용하며 endpoint override 방식으로 재연결할 예정. 실제 버킷/자격증명 미확정
-- **CI/CD 이전** — GitHub Actions의 배포 워크플로우는 AWS EC2를 대상으로 작성되어 있으며, ARK 대상 파이프라인 재작성 필요
+**Database**
+- ARK PostgreSQL 17, Project V 전용 DB/Role 연결
+
+**Object Storage**
+- AWS SDK v2 + `StorageService` 구조를 유지한 채 ARK MinIO AIStor(S3-Compatible)로 전환
+- Internal endpoint / Public Presign endpoint(`storage.chanyongyang.com`) 분리, path-style access, 서비스 전용 credential(Root/Admin credential 미사용), Bucket CORS Origin 제한(`https://vibe.chanyongyang.com`)
+- Presigned PUT 보안 보강: exact Content-Length 서명 · `If-None-Match: *` · HeadObject 실측 size 재검증
+
+**CI/CD / Delivery**
+- GitHub = Canonical Source, ARK GitLab `ark/project-v` = Delivery Copy (CI/CD · Registry · Deploy)
+- GitLab CI는 Docker socket 없이 `postgres:17` service로 테스트하고, commit SHA 이미지를 Registry에 올려 배포한 뒤 `/actuator/health`로 검증
+- 과거 AWS/EC2 배포용 GitHub Actions CD workflow 제거 (GitHub Actions는 Public CI로 유지)
+
+**Runtime / Public**
+- 컨테이너 `ark-project-v`를 ARK 내부 네트워크에 배포 (host port 직접 publish 없음), `/actuator/health` UP
+- `https://vibe.chanyongyang.com` — Cloudflare → Nginx → ARK 내부 네트워크, Let's Encrypt + Nginx TLS
+
+**운영 E2E (2026-09-20)**
+- OAuth: Google / Kakao / Naver 로그인 성공, redirect_uri 모두 운영 HTTPS 기준으로 정상 생성
+- Presigned: 정상 PUT 200 · Content-Length 불일치 non-2xx · 동일 Key 재업로드(`If-None-Match`) 412 · metadata 저장 201 · GET 200 + body 일치 · 허용/비허용 CORS Origin · 10MiB+1 byte 413
+
+**Legacy 정리**
+- 초기 후보였던 `storage.vibe.chanyongyang.com` 폐기 (Nginx, Let's Encrypt certificate, Cloudflare DNS record 삭제 및 미해석 확인) → canonical hostname은 `storage.chanyongyang.com` 하나만 사용
+- Public 응답 지연(TTFB 약 19.7초) 조사 중 Cloudflare DNS에 ARK record와 함께 남아 있던 과거 AWS A record를 발견해 삭제하자 정상화 (원인 격리 과정은 [`10-ark-migration.md`](docs/collab-log/10-ark-migration.md) 참고)
 
 ### 📚 Historical Experience (보존)
 
@@ -223,21 +280,21 @@ Aurora MySQL 전제를 폐기하고 최종 배포 대상을 **ARK**로 확정한
 
 ## API 문서
 
-**로컬 실행 후 Swagger UI (권장)**
+**운영 Swagger UI (ARK)**
+
+```
+https://vibe.chanyongyang.com/swagger-ui/index.html
+```
+
+> 소셜 로그인(Google/Kakao/Naver) → URL의 `?accessToken=` 값 복사 → Swagger 우상단 **Authorize** 클릭 후 붙여넣기
+
+**로컬 실행 후 Swagger UI**
 
 ```
 http://localhost:8080/swagger-ui/index.html
 ```
 
-> 소셜 로그인(Google/Kakao/Naver) → URL의 `?accessToken=` 값 복사 → Swagger 우상단 **Authorize** 클릭 후 붙여넣기
-
-**과거 배포 URL (Historical — 현재 서비스 상태 미검증)**
-
-```
-https://vibe.chanyongyang.com
-```
-
-과거 AWS 배포 시점의 URL입니다. ARK 이관 진행 중이며 이 문서 시점에는 실제 응답 가능 여부를 검증하지 않았습니다.
+`vibe.chanyongyang.com`은 8단계에서 AWS 배포 URL로 쓰던 도메인이며, 2026-09-20 ARK Migration 이후 같은 도메인을 ARK에서 서비스합니다(Cloudflare → Nginx → 애플리케이션).
 
 상세 API 명세: [`docs/api-spec.md`](docs/api-spec.md)
 
@@ -278,10 +335,15 @@ spring.datasource.url=jdbc:postgresql://localhost:5433/gunpla
 spring.datasource.username=gunpla
 spring.datasource.password=gunpla
 
-# Object Storage (5단계 이후 필요) — 코드는 AWS SDK v2 S3 클라이언트 기반
-# ARK 이관 시 S3-compatible endpoint로 재설정 예정
-aws.region=ap-northeast-2
+# Object Storage (5단계 이후 필요) — AWS SDK v2 S3 클라이언트 기반, S3-Compatible(MinIO 등) 사용 가능
+# endpoint 값을 지정하지 않으면 AWS 기본 endpoint를 사용한다 (AWS S3를 쓰면 실제 리전으로 지정)
+# endpoint: 서버 내부에서 S3 API를 호출하는 주소
+# presign-endpoint: 클라이언트에게 내려줄 Presigned URL의 주소 (내부 hostname이 노출되지 않도록 분리)
+aws.region=us-east-1
 aws.s3.bucket=your-bucket-name
+aws.s3.endpoint=http://localhost:9000
+aws.s3.presign-endpoint=http://localhost:9000
+aws.s3.path-style-access=true
 aws.credentials.access-key=YOUR_ACCESS_KEY_ID
 aws.credentials.secret-key=YOUR_SECRET_ACCESS_KEY
 
@@ -319,10 +381,12 @@ java -Xmx64m -Xms64m -classpath "gradle\wrapper\gradle-wrapper.jar" org.gradle.w
 ### 테스트
 
 ```bash
-./gradlew test   # Docker 실행 중이어야 함 (PostgreSQL Testcontainers)
+./gradlew test   # Local: Docker 실행 중이어야 함 (PostgreSQL Testcontainers)
 ```
 
-현재 총 52 tests가 정의되어 있으며 최신 실행에서 전부 통과했습니다 (0 failures, 0 errors, 0 skipped).
+`SPRING_DATASOURCE_URL` 환경변수가 있으면 Testcontainers 대신 그 datasource를 사용합니다 (GitLab CI는 Docker socket 없이 `postgres:17` service로 실행).
+
+현재 총 66 tests가 정의되어 있으며, 마지막 전체 실행(2026-09-15)에서 전부 통과했습니다 (0 failures, 0 errors, 0 skipped).
 
 ---
 
@@ -343,8 +407,8 @@ java -Xmx64m -Xms64m -classpath "gradle\wrapper\gradle-wrapper.jar" org.gradle.w
 ## Git 브랜치 전략
 
 ```
-main      → 프로덕션 배포 (수동 승인)
-develop   → 개발 서버 자동 배포
+main      → Canonical Source of Truth (ARK GitLab delivery copy로 CI/CD · 배포)
+develop   → 통합 브랜치
 feature/* → 기능 단위 개발 (예: feature/catalog-api)
 hotfix/*  → 긴급 수정
 ```
@@ -534,6 +598,7 @@ docker.client.strategy=org.testcontainers.dockerclient.EnvironmentAndSystemPrope
 - `deleteCollection` 시 S3 이미지 선제 정리 (실패해도 DB 삭제 강행)
 - 단위 테스트 12개
 - **교훈**: `Content-Length-Range`는 PUT Presigned URL 미지원 → 서버 레이어 검증으로 대체
+  - *후속 정정 (2026-09)*: 범위 조건(`Content-Length-Range`)은 PUT에서 여전히 불가하지만, 정확한 단일 Content-Length와 `If-None-Match: *`는 서명할 수 있어 이후 보강했고 ARK AIStor 운영 E2E까지 확인했습니다. 자세한 시간 흐름은 [`05-s3-image-upload.md`](docs/collab-log/05-s3-image-upload.md) 참고
 
 </details>
 
@@ -710,6 +775,37 @@ docker.client.strategy=org.testcontainers.dockerclient.EnvironmentAndSystemPrope
 **원인**: `app.oauth2.redirect-url=https://vibe.chanyongyang.com`으로 설정되어 로그인 성공 후 Swagger UI가 아닌 루트로 이동.
 
 **해결**: `app.oauth2.redirect-url=https://vibe.chanyongyang.com/swagger-ui/index.html`로 수정.
+</details>
+
+</details>
+
+---
+
+<details>
+<summary>9단계 — PostgreSQL 전환 + AWS → ARK Migration (2026-09-09 ~ 2026-09-20)</summary>
+
+> 상세 협업 로그: [`docs/collab-log/10-ark-migration.md`](docs/collab-log/10-ark-migration.md)
+
+- AWS 리소스/데이터는 복구하지 않고 GitHub Source 기준으로 ARK에 재배포 (옮길 운영 데이터가 없었음)
+- PostgreSQL 17 전환 + vendor-specific Flyway migration (MySQL migration은 Historical Reference로 보존)
+- S3-Compatible Object Storage(ARK MinIO AIStor) 전환 — AWS SDK v2 구조 유지, Internal / Public Presign endpoint 분리
+- Presigned PUT 보안 보강: exact Content-Length 서명, `If-None-Match: *`, HeadObject 실측 size 재검증
+- GitHub(Canonical) / ARK GitLab(Delivery Copy) 역할 분리, GitLab CI/CD (Runner, Registry, commit SHA 이미지, Health Check)
+- Public HTTPS (Cloudflare → Nginx → ARK 내부 네트워크, Let's Encrypt), OAuth 3종 · Storage 운영 E2E 완료
+- Legacy 정리: `storage.vibe.chanyongyang.com` 폐기, 구 AWS DNS record 삭제
+
+**트러블슈팅**
+
+<details>
+<summary>Public 요청 TTFB 약 19.7초 — Application/Nginx 내부는 정상</summary>
+
+**증상**: Origin Nginx 직접 호출과 Nginx → 애플리케이션 구간은 수십 ms인데, `vibe.chanyongyang.com` Public 요청만 TTFB가 약 19.7초까지 발생.
+
+**원인**: Cloudflare DNS에 과거 AWS A record가 ARK record와 함께 남아 있었다.
+
+**해결**: 구 AWS record를 삭제하자 Public 응답이 정상화되었다. (Cloudflare 내부의 정확한 재시도/폴백 메커니즘은 증명하지 못했으므로 여기서는 결과까지만 기록한다.)
+
+**교훈**: Origin / Nginx → App / Public을 계층별로 나눠 latency를 재면 원인 구간을 빠르게 좁힐 수 있고, Migration 후에는 옛 환경의 잔존 리소스(DNS 등)도 점검해야 한다.
 </details>
 
 </details>

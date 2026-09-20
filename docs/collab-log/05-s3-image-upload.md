@@ -41,6 +41,8 @@
 - `PutObjectRequest.ifNoneMatch("*")`를 함께 서명해 동일 `s3Key`에 대한 재업로드(덮어쓰기)를 방지
 - 세 가지 모두 AWS SDK v2 2.29.52 API로 SDK 레벨에서는 서명 가능함이 실측 확인됨. 다만 **실제 운영 스토리지(ARK MinIO AIStor)가 이 서명된 헤더들을 실제로 강제 검증하는지는 별도의 서버 대상 통합 테스트가 필요**하며 이번 구현 단계에서는 미확인 상태로 남아 있음
 
+> **후속(2026-09-20)**: 위 "미확인" 항목은 실제 ARK AIStor 운영 환경에서 검증을 마쳤습니다. 결과는 이 문서 하단의 "후속 검증" 섹션을 참고하세요. 위 기록은 당시(2026-09-15) 시점의 판단이므로 그대로 보존합니다.
+
 ### LocalStorageService 구현
 
 - **마일스톤 원안**: `LocalStorageService` 로컬 구현체 옵션
@@ -87,3 +89,31 @@ DB에는 `s3Key`만 저장하고 URL 생성은 매 요청마다 on-the-fly로 �
 
 - **6단계 (OAuth2/JWT)**: `@RequestHeader("X-User-Id")` 임시 인증을 `@AuthenticationPrincipal`로 교체 시, `CollectionImageService`의 `userId` 파라미터 주입 방식도 함께 변경
 - **8단계 (배포)**: `application-prod.properties`에 `aws.region`, `aws.s3.bucket`, `aws.credentials.*` 값 등록 필요. 운영 환경에서는 IAM Role(EC2 Instance Profile)로 credentials 대체 권장 (환경변수 키 노출 최소화)
+
+---
+
+## 후속 검증 (Follow-up / Validation) — 2026-09-20 ARK AIStor 운영 E2E
+
+시간 흐름은 이렇습니다.
+
+| 시점 | 상태 |
+|------|------|
+| 5단계 | PUT Presigned URL은 `Content-Length-Range`를 서명할 수 없다고 판단하고 서버 사전 검증으로 대체 |
+| 2026-09-14 ~ 09-15 | 정확한 단일 Content-Length와 `If-None-Match: *`가 SigV4 SignedHeaders에 포함되는 것을 SDK 실측으로 확인하고 구현. 단, ARK MinIO AIStor가 이 헤더를 실제로 강제하는지는 **미확인** |
+| 2026-09-20 | 실제 ARK AIStor 운영 환경에서 **검증 완료** |
+
+위의 "미확인"은 SDK가 무엇을 서명하는가와 스토리지 서버가 그 서명을 실제로 검증하는가가 다른 문제였기 때문에 남겨 둔 것입니다. 2026-09-20에 운영 환경에서 다음을 실측했습니다.
+
+| 시나리오 | 결과 |
+|----------|------|
+| 정상 Presigned PUT (exact Content-Length 서명) | HTTP 200 |
+| Content-Length 불일치 | non-2xx로 차단 |
+| `If-None-Match: *`가 서명된 동일 Key 재업로드 | HTTP 412 |
+| HeadObject 실측 size 검증 + metadata 저장 | HTTP 201 |
+| Presigned GET | HTTP 200 |
+| 다운로드 body와 원본 body 비교 | 일치 |
+| 허용 CORS Origin (`https://vibe.chanyongyang.com`) | 정상 |
+| 비허용 Origin | 차단 |
+| 10MiB + 1 byte 업로드 | HTTP 413 |
+
+결론적으로 exact Content-Length 서명, overwrite 방어(`If-None-Match`), HeadObject 실측 검증, GET은 AWS SDK 수준뿐 아니라 ARK AIStor 실제 Runtime에서도 동작함을 확인했습니다. 이 Migration 전체의 회고는 [`10-ark-migration.md`](10-ark-migration.md)에 정리했습니다.

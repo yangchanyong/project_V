@@ -33,14 +33,18 @@
 ## Tech Stack
 
 - Java 17, Spring Boot 3.5.0
-- MySQL (AWS Aurora), Flyway for migrations
+- PostgreSQL 17, Flyway for migrations (vendor-specific: 현재는 `db/migration/postgresql`, `db/migration/mysql`은 Historical Reference로 보존)
+  - Historical: MySQL / AWS Aurora MySQL (8단계 AWS 운영 시절)
 - Spring Data JPA + QueryDSL 5.1.0 (동적 쿼리)
 - Spring Security + OAuth2 Client + JWT (jjwt 0.12.6)
-- AWS S3 (SDK v2, Presigned URL)
+- AWS SDK v2 기반 S3-compatible Storage abstraction (Presigned URL)
+  - Current Production: ARK MinIO AIStor (Internal S3 endpoint와 Public Presign endpoint 분리)
+  - Historical: AWS S3
 - Bucket4j (Rate Limiting)
 - Swagger/OpenAPI (springdoc-openapi)
 - Gradle, JUnit 5, Testcontainers
-- GitHub Actions (CI/CD, 1단계부터 활성)
+- CI/CD: 현재 ARK delivery는 GitLab CI/CD + Runner + Registry. GitHub `main`이 Canonical Source이고 GitHub Actions는 Public CI
+  - Historical: 8단계 AWS 배포는 GitHub Actions OIDC CD
 
 ## Architecture Rules
 
@@ -70,12 +74,12 @@
 
 ## Database Rules
 
-- 마이그레이션은 Flyway (`V{N}__description.sql`)
+- 마이그레이션은 Flyway (`V{N}__description.sql`), 신규 마이그레이션은 `db/migration/postgresql/`에 작성 (`db/migration/mysql/`은 Historical Reference라 수정 금지)
 - 스키마 변경은 반드시 마이그레이션 파일로, 엔티티 직접 수정 금지
 - 컬럼명/테이블명: snake_case, 엔티티 필드: camelCase
 - ENUM 대신 VARCHAR 사용 (Hibernate 6 `ddl-auto=validate` 호환)
   - 애플리케이션 레이어에서 `@Enumerated(EnumType.STRING)` 매핑
-- `DATETIME(6)` 정밀도 명시 (LocalDateTime 매핑)
+- `TIMESTAMP(6)` 정밀도 명시 (LocalDateTime 매핑, PostgreSQL). Entity에는 `columnDefinition`으로 DB 전용 타입 문자열을 넣지 않음 (Historical MySQL migration은 `DATETIME(6)`)
 - `ddl-auto=validate` 유지
 
 ## Security Rules (중요!)
@@ -84,8 +88,10 @@
 - 계정 식별: `(provider, provider_id)` 조합 기준
   - `email`로 사용자 조회 금지 (같은 email + 다른 provider = 별도 계정)
 - S3 Presigned URL: 반드시 조건부 서명 사용
-  - `contentType` 허용 목록 바인딩
-  - `Content-Length-Range` 바인딩
+  - `contentType` 허용 목록 (서버 검증 후 서명에 바인딩)
+  - 최대 크기(10MiB)는 서버에서 사전 검증하고, 검증된 값을 exact `Content-Length`로 서명 (PUT Presigned URL은 `Content-Length-Range` 범위 조건을 서명할 수 없음)
+  - `If-None-Match: *` 서명으로 동일 Key overwrite 방지
+  - `saveImage` 시 HeadObject 1회로 존재 여부와 실측 size를 재검증 (신고값이 아닌 실측값 기준)
   - `s3Key`는 서버가 UUID 포함하여 생성 (클라이언트 입력 경로 금지)
   - 구체 허용값은 `docs/api-spec.md` 참조
 - JWT Secret, OAuth Client Secret, DB Password는 환경변수로만 주입
