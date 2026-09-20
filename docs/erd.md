@@ -133,3 +133,4 @@ erDiagram
 ### 7. `DATETIME(6)` 정밀도
 - Hibernate 6 + MySQL 조합에서 `LocalDateTime` 매핑 시 마이크로초 정밀도 사용
 - Flyway 마이그레이션에서 명시적으로 `DATETIME(6)` 지정
+- *PostgreSQL 전환(9단계) 후*: `db/migration/postgresql`에서는 `TIMESTAMP(6)`를 사용하고 Entity에서는 `columnDefinition`을 지정하지 않는다. 위 서술과 ERD 다이어그램의 `DATETIME` 표기는 초기 MySQL 설계 기준이며, PostgreSQL에서는 `TIMESTAMP(6)`에 해당한다
