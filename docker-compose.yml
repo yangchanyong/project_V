@@ -13,6 +13,17 @@ services:
     restart: unless-stopped
     networks:
       - ark-internal
+    # Management Plane(8081, /actuator/prometheus)을 ark-internal 내부에서만 접근 가능하게 노출.
+    # ports(Host publish)가 아니라 expose(컨테이너 간 네트워크 metadata)만 사용 — Host/Public에는 노출되지 않는다.
+    expose:
+      - "8081"
+    labels:
+      ark.service: "project-v"
+      ark.monitoring.enabled: "true"
+      ark.service.type: "application"
+      ark.metrics.port: "8081"
+      ark.metrics.path: "/actuator/prometheus"
+      ark.criticality: "standard"
     environment:
       SPRING_PROFILES_ACTIVE: prod
 
