@@ -51,8 +51,10 @@ public class SecurityConfig {
                 // OAuth2, Swagger, 카탈로그는 인증 없이 접근 가능
                 .requestMatchers("/oauth2/**", "/login/**").permitAll()
                 .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**", "/").permitAll()
-                // ARK deploy-compose 템플릿의 컨테이너 내부 헬스체크용 — health 외 actuator endpoint는 노출하지 않음
-                .requestMatchers("/actuator/health").permitAll()
+                // ARK Management Plane health / Prometheus scrape endpoint
+                // custom SecurityFilterChain은 8081(Management Plane)에도 적용되므로 명시적으로 permitAll 필요.
+                // 8081은 Host publish/Public route 없이 ark-internal 내부 전용이며, exposure.include도 health,prometheus로 제한됨
+                .requestMatchers("/actuator/health", "/actuator/prometheus").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/catalog/**").permitAll()
                 // 로그아웃/토큰 갱신은 Access Token 만료 시에도 허용 (Refresh Token 쿠키로 처리)
                 .requestMatchers("/api/v1/auth/**").permitAll()

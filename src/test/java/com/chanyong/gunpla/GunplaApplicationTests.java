@@ -12,6 +12,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -50,5 +51,15 @@ class GunplaApplicationTests {
         mockMvc.perform(get("/actuator/health"))
             .andExpect(status().isOk())
             .andExpect(content().json("{\"status\":\"UP\"}"));
+    }
+
+    @Test
+    void 존재하지_않는_경로는_500이_아닌_404를_반환한다() throws Exception {
+        // permitAll 경로(/swagger-ui/**) 하위의 미매핑 리소스 — Security를 통과해 MVC까지 도달해야
+        // NoResourceFoundException 분기(이번 수정 대상)를 실제로 검증할 수 있다.
+        // Security에서 401로 막히는 인증 필요 경로는 MVC까지 도달하지 않아 이 케이스를 검증하지 못한다.
+        mockMvc.perform(get("/swagger-ui/this-route-does-not-exist"))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
     }
 }
