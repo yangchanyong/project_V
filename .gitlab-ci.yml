@@ -30,6 +30,9 @@ variables:
   DEPLOY_PATH: /opt/ark/services/project-v
   DEPLOY_IMAGE_ENV: ARK_PROJECT_V_IMAGE
   DEPLOY_CONTAINER: ark-project-v
-  DEPLOY_HEALTH_URL: http://127.0.0.1:8080/actuator/health
+  # ark/ci-templates의 deploy-compose.yml은 `docker exec $DEPLOY_CONTAINER ... $DEPLOY_HEALTH_URL`로
+  # 컨테이너 내부에서 health check를 실행한다(Host curl 아님, /c/workspace/ark/ci-templates/templates/deploy-compose.yml 확인).
+  # 즉 Host Port Publish 여부와 무관하게 컨테이너 내부 127.0.0.1로 Management Plane(8081)에 접근 가능하다.
+  DEPLOY_HEALTH_URL: http://127.0.0.1:8081/actuator/health
   DEPLOY_SERVICE_NAME: "Project V"
   # DEPLOY_ROLLBACK_HEALTH_URL: DEPLOY_HEALTH_URL과 동일 endpoint이므로 공통 template 기본값을 그대로 사용한다.
